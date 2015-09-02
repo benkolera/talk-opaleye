@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+
+    <head>
+        <meta charset="utf-8">
+
+        <title>Typesafe SQL in Haskell</title>
+
+        <meta name="description" content="An introduction to Opaleye, an awesome SQL DSL written in haskell.">
+        <meta name="author" content="Ben Kolera">
+
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui">
+
+        <link rel="stylesheet" href="css/reveal.css">
+        <link rel="stylesheet" href="css/theme/sky.css" id="theme">
+
+        <!-- Code syntax highlighting -->
+        <link rel="stylesheet" href="lib/css/zenburn.css">
+
+        <!-- Printing and PDF exports -->
+        <script>
+         var link = document.createElement( 'link' );
+         link.rel = 'stylesheet';
+         link.type = 'text/css';
+         link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
+         document.getElementsByTagName( 'head' )[0].appendChild( link );
+        </script>
+
+        <!--[if lt IE 9]>
+        <script src="lib/js/html5shiv.js"></script>
+        <![endif]-->
+    </head>
+
+    <body>
+
+        <div class="reveal">
+
+            <!-- Any section element inside of this container is displayed as a slide -->
+            <div class="slides">
+                <section>
+                    <h1>Typesafe SQL in Haskell</h1>
+                    <h3>An Introduction to Opaleye</h3>
+                    <p>
+                        <small>Created by <a href="http://twitter.com/benkolera">@BenKolera</a> for the 2015-09 <a href="http://bfpg.org">BFPG</a></small>
+                    </p>
+                </section>
+
+                <section>
+                    <section>
+                      <h1>Me</h1>
+                    </section>
+                    <section>
+                        <p>My story seems fairly common</p>
+                    </section>
+                    <section>
+                        <p>Write JSON->SQL Intepreters for a living</p>
+                        <br />
+                        <p>Frequently get sad about the horrible tradeoffs with interacting with a relational DB from code</p>
+                    </section>
+                    <section>
+                        <p>Started off with Raw JDBC and queries</p>
+                        <br />
+                        <p class="fragment current-visible">SQL is awesome! Having all of SQL is awesome!</p>
+                        <p class="fragment current-visible">Lots of repetitive SQL strings; not so awesome.</p>
+                        <p class="fragment current-visible">Then you start breaking up your queries into little strings and gluing things together yourself...</p>
+                        <p class="fragment current-visible">... then bad things happen.</p>
+                    </section>
+                    <section>
+                        <p>Moved onto Spring + JPA (circa 2010)</p>
+                        <br />
+                        <p class="fragment current-visible">Permanently traumatised from this experience <span class="emoji">&#x1F61C;</span></p>
+                        <p class="fragment current-visible">Too much focus on the objects side.</p>
+                        <p class="fragment current-visible">Querying was still a big, hard to abstract upon string.</p>
+                        <p class="fragment current-visible">Had merit, but lost some of the awesome parts of SQL.</p>
+                    </section>
+                    <section>
+                        <p>Really loved a perl ORM called DBIx::Class!</p>
+                        <br />
+                        <p class="fragment current-visible">Can build little bits of query and compose them together.</p>
+                        <p class="fragment current-visible">Queries were weird incantations of strings and hashes.</p>
+                        <p class="fragment current-visible">Composition things without safety was easy to mess up.</p>
+                        <p class="fragment current-visible">(Also still OO, so some of SQL felt weird/missing).</p>
+                    </section>
+                    <section>
+                        <p>Tried Slick 1.0 in scala</p>
+                        <br />
+                        <p class="fragment current-visible">Very excited because it was much closer to tables and SQL!</p>
+                        <p class="fragment current-visible">Offered the prospect of safely composable SQL bits!!</p>
+                        <p class="fragment current-visible">DSL Types were very complicated.</p>
+                        <p class="fragment current-visible">Sometimes difficult to abstract or decipher compile errors.</p>
+                        <p class="fragment current-visible">Could still generate bad SQL at runtime. <span class="emoji">&#x1F61E;</span></p>
+                    </section>
+                    <section>
+                        <p>Had a very similar experience with HaskellDB</p>
+                        <br />
+                        <p class="fragment current-visible">DSL Forced you to understand a lot of its innards to abstract and figure out compile errors.</p>
+                        <p class="fragment current-visible">Innards were complicated and a bit weird, too.</p>
+                        <p class="fragment current-visible">Could still generate bad SQL at runtime</p>
+                    </section>
+                    <section>
+                        <p>Is SQL just too crazy to model in a nice way in a type system?!?</p>
+                    </section>
+                    <section>
+                        <p>Yes; Back to raw SQL!</p>
+                        <br />
+                        <p class="fragment current-visible">Everything either removes SQL, is unsafely composable or is way too complicated for the payoffs.</p>
+                        <p class="fragment current-visible"><span class="emoji">&#x1F62D;</span></p>
+                    </section>
+                </section>
+
+                <section>
+                    <section>
+                        <h1>Opaleye</h1>
+                    </section>
+                    <section>
+                        <p>Haskell EDSL for generating SQL</p>
+                        <br/>
+                        <p class="fragment current-visible">Not an ORM</p>
+                        <p class="fragment current-visible">Postgres only, which is good and bad.</p>
+                    </section>
+                    <section>
+                        <p>Relatively new: first released 0.2 on 2014-12-01</p>
+                        <br />
+                        <p class="fragment">Now up to 0.4.1</p>
+                    </section>
+                    <section>
+                        <p>Focuses of very fine grained, safe composability.</p>
+                        <br />
+                        <p class="fragment">Without losing anything<sup>*</sup> from SQL or Postgres.</p>
+                        <br />
+                        <p class="fragment">And it will not generate SQL that fails at runtime<sup>#</sup>.</p>
+                    </section>
+                    <section>
+                        <p>And it manages to do this with an API simple enough to:
+                            <ul>
+                                <li class="fragment">Debug the compile errors easily</li>
+                                <li class="fragment">Abstractable without unnecessary type noise</li>
+                                <li class="fragment">Easily extensible if you need to do something weird.</li>
+                            </ul>
+                        </p>
+                    </section>
+                    <section>
+                        <p>I think that it's super freaken cool!</p>
+                        <br />
+                        <p class="fragment">I'm using it at work now.</p>
+                    </section>
+                    <section>
+                        <p>This talk aims to:
+                            <ul>
+                                <li>Spread my entusiasm for this library.</li> 
+                                <li class="fragment">Give you enough understanding to give it a try.</li>
+                            </ul>
+                        </p>
+                    </section>
+                </section>
+                <section>
+                    <section>
+                        <h1>Table Definition</h1>
+                    </section>
+                </section>
+                <section>
+                    <section>
+                        <h1>Querying</h1>
+                    </section>
+                </section>
+                <section>
+                    <section>
+                        <h1>Updates &amp; Insertions</h1>
+                    </section>
+                </section>
+                <section>
+                    <section>
+                        <h1>Aggregation</h1>
+                    </section>
+                </section>
+                <section>
+                    <section>
+                        <h1>Missing Features</h1>
+                    </section>
+                </section>
+                <section>
+                    <section>
+                        <h1>Conclusions</h1>
+                    </section>
+                </section>
+                <section style="text-align: left;">
+                    <h1>THE END</h1>
+                    <p>
+                        - Slides: <a href="http://opaleye.benkolera.com">opaleye.benkolera.com</a> <br>
+                        - Code: <a href="https://github.com/benkolera/talk-opaleye/code">github.com/benkolera/talk-opaleye/code</a>
+                    </p>
+                </section>
+
+            </div>
+
+        </div>
+
+        <script src="lib/js/head.min.js"></script>
+        <script src="js/reveal.js"></script>
+
+        <script>
+
+         // Full list of configuration options available at:
+                // https://github.com/hakimel/reveal.js#configuration
+         Reveal.initialize({
+             controls: true,
+             progress: true,
+             history: true,
+             center: true,
+
+             transition: 'slide', // none/fade/slide/convex/concave/zoom
+
+             // Optional reveal.js plugins
+             dependencies: [
+                 { src: 'lib/js/classList.js', condition: function() { return !document.body.classList; } },
+                 { src: 'plugin/markdown/marked.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+                 { src: 'plugin/markdown/markdown.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+                 { src: 'plugin/highlight/highlight.js', async: true, condition: function() { return !!document.querySelector( 'pre code' ); }, callback: function() { hljs.initHighlightingOnLoad(); } },
+					       { src: 'plugin/zoom-js/zoom.js', async: true },
+					       { src: 'plugin/notes/notes.js', async: true }
+				     ]
+			   });
+
+		    </script>
+
+	  </body>
+</html>
