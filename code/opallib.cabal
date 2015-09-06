@@ -1,0 +1,28 @@
+name:                opallib
+version:             0.1.0.0
+synopsis:            Demo application for showing off opaleye.
+description:         
+homepage:            http://opaleye.benkolera.com
+license:             MIT
+license-file:        LICENSE
+author:              Ben Kolera
+maintainer:          ben.kolera@gmail.com
+build-type:          Simple
+cabal-version:       >=1.10
+
+executable opal-library
+  main-is:             Main.hs
+  -- other-modules:       
+  ghc-options:         -Wall -Werror
+  build-depends:       base                >=4.7 && <4.8
+                     , lens           
+                     , mtl                 >= 2.2
+                     , opaleye             >= 0.4.1
+                     , opaleye-classy      >= 0.3.1
+                     , product-profunctors 
+                     , text
+                     , time 
+                     , postgresql-simple 
+                     -- You won't need the dep below. Just for nice pretty printed output
+                     , groom 
+  default-language:    Haskell2010
