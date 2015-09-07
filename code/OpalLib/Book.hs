@@ -18,12 +18,12 @@ import OpalLib.Ids
 import OpalLib.BookKeyword
 import OpalLib.Pagination
   
+
 data Book' a b = Book
   { _bookIsbn  :: a
   , _bookTitle :: b
   } deriving Show
 makeLenses ''Book'
-
 makeAdaptorAndInstance "pBook" ''Book'
 
 type BookColumns = Book' IsbnColumn (Column PGText)
@@ -40,6 +40,14 @@ bookQuery = queryTable bookTable
 
 booksAll :: CanOpaleye c e m => m [Book]
 booksAll = liftQuery bookQuery
+
+bookTitlesQuery :: Query (Column PGText)
+bookTitlesQuery = proc () -> do
+  b <- bookQuery -< ()
+  returnA -< b^.bookTitle
+
+bookTitles :: CanOpaleye c e m => m [Text]
+bookTitles = liftQuery bookTitlesQuery
 
 findBookByIsbnQ :: IsbnColumn -> Query BookColumns
 findBookByIsbnQ isbn = proc () -> do

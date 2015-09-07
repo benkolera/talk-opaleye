@@ -149,6 +149,7 @@ The easiest way to think about profunctors is to specialise them to (->).
 λ> :t pBook (Book (* 2) (++"bar"))
 pBook (Book (* 2) (++"bar"))
   :: Book' Int [Char] -> Book' Int [Char]
+
 λ> pBook (Book (* 2) (++"bar")) (Book 2 "foo")
 Book {_bookIsbn = 4, _bookTitle = "foobar"}
 ```
@@ -331,19 +332,147 @@ through and having exceptions thrown in my applications.
 
 ### Restriction
 
-Lets query a book based on it's title.
+Lets query a book based on its ISBN.
+
+```haskell
+findBookByIsbnQ :: IsbnColumn -> Query BookColumns
+findBookByIsbnQ isbn = proc () -> do
+   b <- bookQuery -< ()
+   restrict -< unIsbn (b^.bookIsbn) .== unIsbn isbn
+   returnA -< b
+```
+
+Lets ignore this funky syntax for now and focus on what's happening:
+
+- We start with all books
+- Then restrict them to only the ones which have an Isbn that matches our input.
+- We return the books that we found.
+
+Generated SQL:
+
+```sql
+SELECT "isbn0_1" as "result1_2",
+       "title1_1" as "result2_2"
+FROM (SELECT *
+      FROM (SELECT "isbn" as "isbn0_1",
+                   "title" as "title1_1"
+            FROM "book" as "T1") as "T1"
+      WHERE (("isbn0_1") = 9781593272838)) as "T1"
+```
+
+Then to run the query and return a book if there is one:
+
+```haskell
+findBookByIsbn :: CanOpaleye c e m => Isbn -> m (Maybe Book)
+findBookByIsbn = liftQueryFirst . findBookByIsbnQ . constant
+```
+
+Constant is the opposite of QueryRunnerDefault. It goes from a haskell value to
+a literal column(s). Here we are turning the Isbn with a haskell Int64 inside it
+to a Isbn' (Column PGInt8).
+
+More info in (OpalLib.Book)[OpalLib/Book.hs].
 
 ### Arrows
 
-### Join
+TODO
 
 ### Projection
 
-### Reusing Joins
+Remember that the only real restriction we have on the output of our query is
+that it is a product profunctor, so you're not limited to always returning your
+table object. You're free to return tuples or just a single column.
+
+```haskell
+bookTitlesQuery :: Query (Column PGText)
+bookTitlesQuery = proc () -> do
+  b <- bookQuery -< ()
+  returnA -< b^.bookTitle
+
+bookTitles :: CanOpaleye c e m => m [Text]
+bookTitles = liftQuery bookTitlesQuery
+```
+
+```sql
+SELECT "title1_1" as "result1_2"
+FROM (SELECT *
+      FROM (SELECT "isbn" as "isbn0_1",
+                   "title" as "title1_1"
+            FROM "book" as "T1") as "T1") as "T1"
+```
+
+### Join
+
+Joins are as simple as putting two tables in your arrow comprehension and
+restricting them as appropriate.
+
+```haskell
+booksWithKeywordQuery :: Column PGText -> Query BookColumns
+booksWithKeywordQuery kw = proc () -> do
+  b <- bookQuery        -< ()
+  k <- bookKeywordQuery -< ()
+  restrict -< b^.bookIsbn.to unIsbn .== k^.bookKeywordBookIsbn.to unIsbn
+  restrict -< k^.bookKeywordKeyword .== kw
+  returnA -< b
+```
+
+```sql
+SELECT "isbn0_1" as "result1_3",
+       "title1_1" as "result2_3"
+FROM (SELECT *
+      FROM (SELECT "isbn" as "isbn0_1",
+                   "title" as "title1_1"
+            FROM "book" as "T1") as "T1",
+           (SELECT "book_isbn" as "book_isbn0_2",
+                   "keyword" as "keyword1_2"
+            FROM "book_keyword" as "T1") as "T2"
+      WHERE (("keyword1_2") = E'Programming') AND (("isbn0_1") = ("book_isbn0_2"))) as "T1"
+```
+
+### Reusing Joins & Restrictions
+
+But the above example would get clunky if you had to join to keyword lots. Lets
+refactor it out so that we can reuse it elsewhere.
+
+```haskell
+bookKeywordJoin :: QueryArr BookColumns (Column PGText)
+bookKeywordJoin = proc (b) -> do
+  k <- bookKeywordQuery -< ()
+  restrict -< b^.bookIsbn.to unIsbn .== k^.bookKeywordBookIsbn.to unIsbn
+  returnA -< k^.bookKeywordKeyword
+
+booksWithKeywordQuery :: Column PGText -> Query BookColumns
+booksWithKeywordQuery kw = proc () -> do
+  b  <- bookQuery       -< ()
+  k  <- bookKeywordJoin -< ()
+  restrict -< k .== kw
+  returnA -< b
+```
+
+And if we are restricting lots based on keywords we can even make that part
+reusable:
+
+```haskell
+bookRestrictedByKeyword
+  :: Column PGText
+  -> QueryArr BookColumns (Column PGText)
+bookRestrictedByKeyword kw = proc (b) -> do
+  k <- bookKeywordJoin -< b
+  restrict -< k .== kw
+  returnA -< k
+
+booksWithKeywordQuery :: Column PGText -> Query BookColumns
+booksWithKeywordQuery kw = proc () -> do
+  b <- bookQuery -< ()
+  bookRestrictedByKeyword kw -< b
+  returnA -< b
+```
+
+All of these generate exactly the same SQL.
+
+More info in (OpalLib.Book)[OpalLib/Book.hs].
 
 ## Inserts / Updates
-
-### constant
 
 ### insert
 
@@ -370,6 +499,8 @@ Lets query a book based on it's title.
 ## Room For Improvement
 
 ### Dates
+
+### Cardinality
 
 ### Newtypes
 

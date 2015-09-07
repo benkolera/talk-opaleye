@@ -17,6 +17,7 @@ main :: IO ()
 main = do
   eg_allBooks
   eg_findLyah
+  eg_projection
   eg_allProgrammingBooks
   eg_allProgrammingAccessions
   eg_borrow
@@ -38,6 +39,9 @@ eg_findLyah :: IO ()
 eg_findLyah = opaleyeExample "Find by ISBN"
   (findBookByIsbnQ (constant lyahIsbn))
   (findBookByIsbn lyahIsbn)
+
+eg_projection :: IO ()
+eg_projection = opaleyeExample "Projection" bookTitlesQuery bookTitles
 
 eg_allProgrammingBooks :: IO ()
 eg_allProgrammingBooks = opaleyeExample "All Programming Books"
