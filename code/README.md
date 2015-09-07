@@ -565,6 +565,13 @@ aggregate takes an Aggregate a and a Query a, and is a product profunctor
 so if there are more than one columns you can supply and aggregate function for
 each hole with an appropriate pAccession or pN call.
 
+Also don't forget that Querys are Functors so we can just fmap the result rather
+than breaking out into arrow syntax. They are also Profunctors,Applicatives and
+even Categories (you can compose them e.g. ```QueryArr a b -> QueryArr b c ->
+QueryArr a c). Haskell is awesome! 
+
+Generated SQL:
+
 ```sql
 SELECT "result0_3" as "result1_4"
 FROM (SELECT *
@@ -579,11 +586,6 @@ FROM (SELECT *
                   WHERE (("isbn0_2") = 9781593272838) AND (("book_isbn1_1") = ("isbn0_2"))) as "T1"
             GROUP BY COALESCE(0)) as "T1") as "T1"
 ```
-
-Also don't forget that Querys are Functors so we can just fmap the result rather
-than breaking out into arrow syntax. They are also Profunctors,Applicatives and
-even Categories (you can compose them e.g. ```QueryArr a b -> QueryArr b c ->
-QueryArr a c) !!
 
 ### groupBy
 
@@ -622,7 +624,7 @@ FROM (SELECT *
             ORDER BY "result1_4" DESC NULLS FIRST) as "T1") as "T1"
 ```
 
-### other Aggregate Functions
+### Other Aggregate Functions
 
 There are lots of other aggregate functions defined in
 [Opaleye.Aggregate](http://hackage.haskell.org/package/opaleye-0.4.1.0/docs/Opaleye-Aggregate.html):
@@ -642,7 +644,7 @@ Pagination is a very common thing that otherwise needs lots of repetition or
 ugly hacks. Wouldn't it be great if you you write it once for any query and
 repeat easily compose it into any query?
 
-Lets define 
+Lets define our pagination input and results.
 
 ```haskell
 data Pagination = Pagination
@@ -660,7 +662,7 @@ data PaginationResults a = PaginationResults
 makeLenses ''PaginationResults
 ```
 
-We can simply limit an offset any Query a with functions from opaleye:
+We can simply limit and offset any Query a with functions from opaleye:
 
 ```haskell
 paginateQuery :: Pagination -> Query a -> Query a
@@ -757,10 +759,12 @@ searchAccessionIdQuery s = aggregate agg $ proc () -> do
     likeTitle b t = (b^.bookTitle) `like` (constant $ "%" <> t <> "%")
 ```
 
-(Okay, so that's poorly factored and we start to see Arrows get in the way of
-our usual toolbox [namely not being able to use Data.Foldable.traverse_])
+(Okay, so granted that's poorly factored and we start to see Arrows get in the way of
+our usual toolbox [namely not being able to use Data.Foldable.traverse_], but it
+is still getting some reuse out of what we've written and could be refactored to
+be prettier)
 
-But then we can easily get back the accessionId,book,due date and keywords
+Then we can easily get back the accessionId,book,due date and keywords
 reusing a lot of stuff.
 
 ```haskell
@@ -791,17 +795,60 @@ Details in [OpalLib.Search](OpalLib/Search.hs)
 
 ## Room For Improvement
 
+I've talked about the good parts, but there are a number of bits that have room
+for improvement in Opaleye.
+
+These could be my inexperience or they could be just be because someone hasn't
+needed them yet. Given that opaleye is still pretty young I'm sure some of these
+have some clever fixes.
+
 ### Dates
+
+There is no function equivalent to NOW(). It's easy to write though:
+
+```haskell
+now :: Column PGTimestamptz
+now = C.Column (HPQ.FunExpr "now" [])
+```
+
+Nor is there any support for infinite timestamps (Unbounded in pg-simple) or intervals.
+
+There is also no nice way to compare dates and timestamps without ugly coercion.
+It needs some love like what already exists for PGOrd.
 
 ### Cardinality
 
+It's sometimes easy to introduce joins to many relationships that blow up the
+number of results that you're expecting back.
+
+It would kinda be nice to have relationships modelable so that you could get an
+idea of the cardinality in the types, but I think that would break the
+simplicity of things.
+
 ### Newtypes
+
+Wrapping things in newtypes introduces some extra ceremony with the product
+profunctor parts where we don't necessarily need the extra hassle. It's minor
+compared to the gains though.
+
+Also, the template haskell for makeAdaptorAndInstance won't accept a newtype, so
+you have to pay the runtime price of a full blown datatype with a single
+constructor. 
 
 ### Varchar Lengths
 
-### Prefetching
+It's really easy to bust up an insert / update if the Text exceeds the VARCHAR
+length. It'd be nice if there was a way to make this more explicit in the types.
 
-### Like anchoring / escaping
+### Like Escaping
+
+With the like operator, it's a bit weird that it takes a raw PGText. It means
+you'd have to remember to escape % signs in user input yourself, which seems
+like it could be better.
+
+### Using a DB that isn't PostgreSQL
+
+But why would you do that? :wink:
 
 ## Wrap Up
 
