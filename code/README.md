@@ -5,7 +5,7 @@
 You don't need to run the code to follow along, but if you want to see things
 work / inspect types / tinker then you may want to set things up.
 
-```
+```sh
 psql postgres -c "CREATE DATABASE opallib" && psql opallib -f setup.sql
 
 cabal sandbox init
@@ -17,12 +17,12 @@ Before running the code, you'll need to edit the connectInfo hardcoded in:
 [OpalLib.Util](OpalLib/Util.hs)
 
 To run all the queries, print the Queries and the output:
-```
+```sh
 cabal run 
 ```
 
 To get a repl that you can inspect types and run things by hand:
-```
+```sh
 cabal repl
 ```
 
@@ -71,7 +71,7 @@ definitions form the starting point for our queries.
 First we define a datatype with a hole record accessor and a type parameter for
 each column. This seems crazy at first, but it makes a lot of sense later!
 
-```
+```haskell
 data Book' a b = Book
   { _bookIsbn  :: a
   , _bookTitle :: b
@@ -82,7 +82,7 @@ makeLenses ''Book'
 We then make shorthand types for the database types (Columns) and the types that
 we want to end up with once we run our query.
 
-```
+```haskell
 type BookColumns = Book' IsbnColumn (Column PGText)
 type Book = Book' Isbn Text
 ```
@@ -92,7 +92,7 @@ for the full list of column types.
 
 We then line these columns up to a table and column names with a table definition.
 
-```
+```haskell
 makeAdaptorAndInstance "pBook" ''Book'
 
 bookTable :: Table BookColumns BookColumns
@@ -109,7 +109,7 @@ See [OpalLib.Book](OpalLib/Book.hs) for the full code.
 Note that this is the same thing as having a tuple except that we have names for
 each hole rather than 1,2,3,4,5.
 
-```
+```haskell
 type Book' a b = (a,b)
 type BookColumns = (IsbnColumn,(Column PGText))
 type Book = (Isbn,Text)
@@ -118,7 +118,7 @@ type Book = (Isbn,Text)
 Except that [Data.Profunctor.Product](http://hackage.haskell.org/package/product-profunctors-0.6.3/docs/Data-Profunctor-Product.html)
 already has a product profunctor for tuples from 1-26 widths!
 
-```
+```haskell
 bookTable :: Table BookColums BookColumns
 bookTable = Table "book" $ p2
   ( pIsbn . Isbn $ required "isbn"
@@ -135,7 +135,7 @@ of columns enough to give them proper names (the names help!).
 
 But what are these weird pBook / p2 things?
 
-```
+```haskell
 λ> :t pBook
 pBook
   :: Data.Profunctor.Product.ProductProfunctor p =>
@@ -145,7 +145,7 @@ pBook
 
 The easiest way to think about profunctors is to specialise them to (->).
 
-```
+```haskell
 λ> :t pBook (Book (* 2) (++"bar"))
 pBook (Book (* 2) (++"bar"))
   :: Book' Int [Char] -> Book' Int [Char]
@@ -160,7 +160,7 @@ boilerplate:
 
 - TableDefiniton: For constructing table definitions (you saw this just before!) 
 - Constant: for constructing a column literal from a haskell value
-- Unpackspec: For going from a column to a haskell value when a query is run.
+- QueryRunner: For going from a column to a haskell value when a query is run.
 - Aggregate: Used for constructing aggregations on a set of columns.
 - Etc.
 
@@ -172,7 +172,7 @@ It would be counterproductive to our goals to just record the primary key of the
 table (in Book, this was ISBN) just as a PGInt8 as that would mean that when we
 are joining tables we could easily mess up and join the wrong PGInt8s together.
 
-```
+```haskell
 data Isbn' a = Isbn { unIsbn :: a } deriving Show
 makeAdaptorAndInstance "pIsbn" ''Isbn'
 
@@ -184,7 +184,7 @@ The annoying thing about this is that whenever you want to deal with the column
 there is some extra unwrapping in places that you don't actually want it. Like
 what we saw in the table definition:
 
-```
+```haskell
 bookTable = Table "book" $ p2
   ( pIsbn . Isbn $ required "isbn"
   , required "title"
@@ -204,7 +204,7 @@ definition had two type parameters. We didn't use it for Books, but the first
 type parameter is for noting that some of the columns for insertion are optional
 because the database will default the value (sequence based id, etc.).
 
-```
+```haskell
 type PersonColumns = Person' PersonIdColumn (Column PGText)
 type PersonInsertColumns = Person' PersonIdColumnMaybe (Column PGText)
 type Person = Person' PersonId Text
@@ -228,16 +228,35 @@ for: making SQL!
 
 ### QueryTable & Columns
 
-The queryTable takes a table definition and essentially creates a "SELECT * FROM
+The queryTable takes a table definition and essentially creates a ```SELECT * FROM```
 foo query" that you can build other queries from.
 
-```
-personQuery :: Query PersonColumns
-personQuery = queryTable personTable
+```haskell
+bookQuery :: Query BookColumns
+bookQuery = queryTable bookTable
 ```
 
 That query has all of the column names as the return type, so we have access to
 all of those columns to restrict and project.
+
+The query generated looks like this:
+
+```sql
+SELECT "isbn0_1" as "result1_2",
+       "title1_1" as "result2_2"
+FROM (SELECT *
+      FROM (SELECT "isbn" as "isbn0_1",
+                   "title" as "title1_1"
+            FROM "book" as "T1") as "T1") as "T1"
+```
+
+Which is probably not how you'd write it, but with the wonders of the Postgres
+Query planner should be more or less the same performance as the idealised SQL.
+There are plans to improve the query generator over time so that it can get
+closer to the ideal SQL that you'd expect, but correctness is an overruling
+goal. Tom makes the claim that if your query is being generated in a way that is
+significantly slower than the ideal SQL, that is considered a bug and he'll do
+what he can to optimise that case. 
 
 ### Columns & Queries
 
@@ -245,14 +264,74 @@ So we have two main building blocks for Opaleye.
 
 - Columns: An individual SQL expression used in restrictions or projections. This comes in three main forms:
   - Column Reference: the columns that our output from queryTable
-  - Literals: A literal value in the SQL (e.g. ```pgStrictText "foo" :: Column```
-  PGText which corresponds to a 'foo' in the actual SQL)
+  - Literals: A literal value in the SQL (e.g. ```pgStrictText "foo" :: Column
+    PGText``` which corresponds to a 'foo' in the actual SQL)
   - Compound expressions: E.g. ```(b^.bookTitle .== pgStrictText "foo") :: Column PGBool```
 - Queries: A fully runnable SQL query. Can be joined to other queries.
 
 ### Running Queries
 
+Opaleye contains many different ways to run queries, which are defined in:
+
+[Opaleye.RunQuery](http://hackage.haskell.org/package/opaleye-0.4.1.0/docs/Opaleye-RunQuery.html)
+
+The main one that we want is:
+
+```haskell
+runQuery :: Default QueryRunner columns haskells => Connection -> Query columns -> IO [haskells]
+```
+
+Which looks scary, but reads:
+
+> Give me a DB connection and a Query of columns, and so long as there is a way to
+  convert columns to the haskell values, I'll run the query against the database
+  and give you back the haskell values.
+
+You guessed it, QueryRunner is a ProductProfunctor, so as long as you've got a
+transformation between each column and the haskell type then it'll all just work.
+
+Lets see it in action:
+
+```haskell
+type IsbnColumn = Isbn' (Column PGInt8)
+type BookColumns = Book' IsbnColumn (Column PGText)
+
+type Isbn       = Isbn' Int64
+type Book = Book' Isbn Text
+
+booksAll :: Connection -> IO Book
+booksAll c = runQuery c (queryTable bookTable)
+```
+
+This works because there is a ```QueryRunnerColumnDefault PGInt8 Int64``` and
+```QueryRunnerColumnDefault PGText Text``` and the makeAdaptorAndInstance
+defined a productprofunctor instance for Book.
+
+To see which QueryRunnerColumnDefault instances there are, take a look at this
+list of instances here:
+
+http://hackage.haskell.org/package/opaleye-0.4.1.0/docs/Opaleye-Internal-RunQuery.html#t:QueryRunnerColumnDefault
+
+Because of this type magic, it is always required to have type signatures on
+your functions that are actually running the query and returning haskell values.
+You'll see this all over OpalLib.
+
+Also, in OpalLib the running of the query is slightly different:
+
+```haskell
+booksAll :: CanOpaleye c e m => m [Book]
+booksAll = liftQuery bookQuery
+```
+
+Which uses the monad transformer versions of the RunQuery functions. These are
+defined in a library that I wrote called
+[Opaleye.Classy](http://hackage.haskell.org/package/opaleye-classy). Use of this
+is completely optional but I find it easier than threading the Connection
+through and having exceptions thrown in my applications.
+
 ### Restriction
+
+Lets query a book based on it's title.
 
 ### Arrows
 
