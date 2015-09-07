@@ -26,6 +26,9 @@ To get a repl that you can inspect types and run things by hand:
 cabal repl
 ```
 
+And if you want to follow on with the database schema that we are working with,
+take a peek at the [DB setup script](setup.sql).
+
 ## Why Opaleye
 
 Opaleye is an embedded DSL written in Haskell that generates SQL and runs it
@@ -41,19 +44,27 @@ This is an awesome thing, because so many applications talk to databases and it
 has always been saddening to get hit with the same old tradeoffs / problems:
 
 - Raw SQL is easy but not safely composable
-- Some things restrict what you can do so you lose valuable parts of SQL
+- Some DB APIs restrict what you can do so you lose valuable parts of SQL
 (joins,aggregations, etc)
-- Some things need your data types constrained so much that it's impractical to
+- Some APIs need your data types constrained so much that it's impractical to
   use the library without giving up a lot of control to the libraries template
   haskell functions.
+- You give up control over performance and can get very slow (albeit correct) queries.
 - The API can still generate SQL that fails at runtime.
 - Or even if it can do all of that, the density of the API and type errors make
   you angry and go back to one of the less-safe-but-easier options.
 
-Opaleye achieves all of its goals without any of these tradeoffs, which (I
-think) is super exciting and worth your time to check it out! :smile:
+Opaleye comes achieves the goal of composable, typesafe SQL without any of these
+problems save for a moderate (but not impassable) learning curve.
+
+It is super refreshing to be able to treat your SQL with the same dose of safe
+abstraction as the rest of you haskell code, and for that alone it's well worth
+diving in and trying it out for yourself! :smile:
 
 ## Table Definition
+
+First we need to tell Opaleye what our tables and columns are. These table
+definitions form the starting point for our queries.
 
 ### Record Definition
 
@@ -212,11 +223,32 @@ See this in full in [OpalLib.Person](OpalLib/Person.hs)
 
 ## Querying
 
-### QueryTable
+Now that we have defined our tables, we need to start doing what we came here
+for: to start building queries.
 
-### Columns
+### QueryTable & Columns
 
-### Query
+The queryTable takes a table definition and creates a SELECT * FROM foo query
+that you can build other queries from.
+
+```
+personQuery :: Query PersonColumns
+personQuery = queryTable personTable
+```
+
+That query has all of the column names as the return type, so we have access to
+all of those columns to restrict and project.
+
+### Columns & Queries
+
+So we have two main building blocks for Opaleye.
+
+- Columns: An individual SQL expression used in restrictions or projections. This comes in three main forms:
+  - Column Reference: the columns that our output from queryTable
+  - Literals: A literal value in the SQL (e.g. pgStrictText "foo" :: Column
+  PGText which corresponds to a 'foo' in the actual SQL)
+  - Compound expressions: E.g. (b^.bookTitle .== pgStrictText "foo") :: Column PGBool
+- Queries: A fully runnable SQL query. Can be joined to other queries.
 
 ### Running Queries
 
