@@ -55,13 +55,73 @@ think) is super exciting and worth your time to check it out! :smile:
 
 ## Table Definition
 
+### Record Definition
+
+### Isomorphic to a Tuple
+
+### Product Profunctor
+
+### Newtypes
+
+### Default Columns / Serial IDs
+
 ## Querying
+
+### QueryTable
+
+### Columns
+
+### Query
+
+### Running Queries
+
+### Restriction
+
+### Arrows
+
+### Join
+
+### Projection
+
+### Reusing Joins
 
 ## Inserts / Updates
 
+### constant
+
+### insert
+
+### update
+
 ## Aggregation
 
-## Extending Opaleye
+### count
+
+### aggregate / Aggregator
+
+### groupBy
+
+### other Aggregate Functions
+
+### pagination
+
+## The Big Finale
+
+### search
+
+### paginated search
+
+## Room For Improvement
+
+### Dates
+
+### Newtypes
+
+### Varchar Lengths
+
+### Prefetching
+
+### Like anchoring / escaping
 
 ## Acknowledgements & Further Resources
 
