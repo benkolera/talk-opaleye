@@ -76,7 +76,7 @@ type BookColumns = Book' IsbnColumn (Column PGText)
 type Book = Book' Isbn Text
 ```
 
-See [http://hackage.haskell.org/package/opaleye-0.4.1.0/docs/Opaleye-PGTypes.html](Opaleye.PGTypes)
+See [Opaleye.PGTypes](http://hackage.haskell.org/package/opaleye-0.4.1.0/docs/Opaleye-PGTypes.html)
 for the full list of column types.
 
 We then line these columns up to a table and column names with a table definition.
@@ -91,7 +91,7 @@ bookTable = Table "book" $ pBook Book
   }
 ```
 
-[OpalLib/Book.hs](See in full in Book.hs)
+See [OpalLib.Book](OpalLib/Book.hs) for all of the full code.
 
 ### Isomorphic to a Tuple
 
