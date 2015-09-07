@@ -224,12 +224,12 @@ See this in full in [OpalLib.Person](OpalLib/Person.hs)
 ## Querying
 
 Now that we have defined our tables, we need to start doing what we came here
-for: to start building queries.
+for: making SQL!
 
 ### QueryTable & Columns
 
-The queryTable takes a table definition and creates a SELECT * FROM foo query
-that you can build other queries from.
+The queryTable takes a table definition and essentially creates a "SELECT * FROM
+foo query" that you can build other queries from.
 
 ```
 personQuery :: Query PersonColumns
@@ -245,9 +245,9 @@ So we have two main building blocks for Opaleye.
 
 - Columns: An individual SQL expression used in restrictions or projections. This comes in three main forms:
   - Column Reference: the columns that our output from queryTable
-  - Literals: A literal value in the SQL (e.g. pgStrictText "foo" :: Column
+  - Literals: A literal value in the SQL (e.g. ```pgStrictText "foo" :: Column```
   PGText which corresponds to a 'foo' in the actual SQL)
-  - Compound expressions: E.g. (b^.bookTitle .== pgStrictText "foo") :: Column PGBool
+  - Compound expressions: E.g. ```(b^.bookTitle .== pgStrictText "foo") :: Column PGBool```
 - Queries: A fully runnable SQL query. Can be joined to other queries.
 
 ### Running Queries
