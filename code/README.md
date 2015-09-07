@@ -12,11 +12,9 @@ cabal sandbox init
 cabal install --only-dependencies
 ```
 
-You'll need to edit the connectInfo hardcoded in
+Before running the code, you'll need to edit the connectInfo hardcoded in:
 
 [OpalLib.Util](OpalLib/Util.hs)
-
-And then you'll be able to run / play in the repl
 
 To run all the queries, print the Queries and the output:
 ```
@@ -38,9 +36,6 @@ against a postgres database. It focuses on:
 aggregations, etc)
 - While maintaining a typesafe API that will not generate SQL that fails at
 runtime.
-
-While it takes some getting used to, it also manages this safety and
-composability with an API isn't super scary to use or decipher type errors from.
 
 This is an awesome thing, because so many applications talk to databases and it
 has always been saddening to get hit with the same old tradeoffs / problems:
