@@ -18,16 +18,18 @@ import Opaleye
 import Opaleye.Classy
 
 import OpalLib.Ids
+import OpalLib.Date
 import OpalLib.Accession
 import OpalLib.Person
 import OpalLib.Book
 
-data Loan' a b c d e = Loan
+data Loan' a b c d e f = Loan
   { _loanId          :: a
   , _loanPersonId    :: b
   , _loanAccessionId :: c
   , _loanBorrowed    :: d
-  , _loanReturned    :: e
+  , _loanDue         :: e
+  , _loanReturned    :: f
   } deriving Show
 makeLenses ''Loan'
 
@@ -38,6 +40,7 @@ type LoanColumns = Loan'
   PersonIdColumn
   AccessionIdColumn
   (Column PGTimestamptz)
+  (Column PGTimestamptz)
   (Column (Nullable PGTimestamptz))
 
 type LoanInsertColumns = Loan'
@@ -45,12 +48,14 @@ type LoanInsertColumns = Loan'
   PersonIdColumn
   AccessionIdColumn
   (Column PGTimestamptz)
+  (Column PGTimestamptz)
   (Column (Nullable PGTimestamptz))
 
 type Loan = Loan'
   LoanId
   PersonId
   AccessionId
+  UTCTime
   UTCTime
   (Maybe UTCTime)
 
@@ -65,6 +70,7 @@ loanTable = Table "loan" $ pLoan Loan
   , _loanPersonId    = pPersonId . PersonId $ required "person_id"
   , _loanAccessionId = pAccessionId . AccessionId $ required "accession_id"
   , _loanBorrowed    = required "borrowed"
+  , _loanDue         = required "due"
   , _loanReturned    = required "returned"
   }
 
@@ -110,13 +116,15 @@ borrow
   => AccessionId 
   -> PersonId
   -> UTCTime
+  -> UTCTime
   -> m LoanId
-borrow aId pId b =
+borrow aId pId b d =
   fmap head $ liftInsertReturning loanTable (^.loanId) $ Loan
     { _loanId          = LoanId Nothing
     , _loanPersonId    = constant pId
     , _loanAccessionId = constant aId
     , _loanBorrowed    = constant b
+    , _loanDue         = constant d
     , _loanReturned    = null
     }
 
@@ -132,6 +140,16 @@ loansOutstandingQuery = proc () -> do
 
 loansOutstanding :: CanOpaleye c e m => m [FullLoan]
 loansOutstanding = liftQuery loansOutstandingQuery
+
+loansOverdueQuery :: Query FullLoanColumns
+loansOverdueQuery = proc () -> do
+  t <- fullLoanQuery -< ()
+  restrictLoansCurrent -< t^._1
+  restrict -< t^._1.loanDue .<= now
+  returnA -< t
+
+loansOverdue :: CanOpaleye c e m => m [FullLoan]
+loansOverdue = liftQuery loansOverdueQuery
 
 loanReturn :: CanOpaleye c e m => LoanId -> UTCTime -> m ()
 loanReturn lId r = void $ liftUpdate loanTable

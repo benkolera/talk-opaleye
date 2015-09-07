@@ -16,7 +16,8 @@ import Opaleye.Classy
 
 import OpalLib.Ids
 import OpalLib.BookKeyword
-
+import OpalLib.Pagination
+  
 data Book' a b = Book
   { _bookIsbn  :: a
   , _bookTitle :: b
@@ -55,11 +56,27 @@ booksWithKeywordQuery kw = proc () -> do
   bookRestrictedByKeyword kw -< b
   returnA -< b
 
-bookRestrictedByKeyword :: Column PGText -> QueryArr BookColumns ()
-bookRestrictedByKeyword kw = proc (b) -> do
+bookKeywordJoin :: QueryArr BookColumns (Column PGText)
+bookKeywordJoin = proc (b) -> do
   k <- bookKeywordQuery -< ()
   restrict -< b^.bookIsbn.to unIsbn .== k^.bookKeywordBookIsbn.to unIsbn
-  restrict -< k^.bookKeywordKeyword .== kw
+  returnA -< k^.bookKeywordKeyword
+
+bookRestrictedByKeyword
+  :: Column PGText
+  -> QueryArr BookColumns (Column PGText)
+bookRestrictedByKeyword kw = proc (b) -> do
+  k <- bookKeywordJoin -< b
+  restrict -< k .== kw
+  returnA -< k
 
 booksWithKeyword :: CanOpaleye c e m => Text -> m [Book]
 booksWithKeyword = liftQuery . booksWithKeywordQuery . constant
+
+booksWithKeywordPaginated
+  :: CanOpaleye c e m
+  => Pagination
+  -> Text
+  -> m (PaginationResults Book)
+booksWithKeywordPaginated p
+  = paginate p (^.bookIsbn.to unIsbn) . booksWithKeywordQuery . constant

@@ -2,19 +2,15 @@
 module Main where
 
 import Control.Lens  ((^.),_1)
-import Control.Monad (when)
-import Data.Time     (getCurrentTime)
+import Data.Time     (getCurrentTime,utctDay,UTCTime(..),secondsToDiffTime,addDays)
 import Opaleye       (constant,pgStrictText)
 
 import OpalLib.Accession
 import OpalLib.Book
 import OpalLib.Ids
 import OpalLib.Loan
-import OpalLib.Person
+import OpalLib.Pagination
 import OpalLib.Util
-
-testAll :: Bool
-testAll = False
 
 main :: IO ()
 main = do
@@ -24,12 +20,10 @@ main = do
   eg_allProgrammingAccessions
   eg_borrow
   eg_return
-
-  when testAll $ do
-    eg_allAccessions
-    eg_allPeople
-    eg_allLoans
-    eg_allProgrammingBooks
+  eg_overdue
+  eg_bookCount
+  eg_accessionCountKeywords
+  eg_pagination
 
 lyahIsbn :: Isbn
 lyahIsbn = Isbn 9781593272838
@@ -56,8 +50,9 @@ eg_borrow :: IO ()
 eg_borrow = do
   printTitle "Borrow Book (Insert Loan)"
   b <- getCurrentTime
+  let d = UTCTime (addDays 28 $ utctDay b) (secondsToDiffTime (60*60*17))
   printOpaleye $ do
-    lId <- borrow (AccessionId 1) (PersonId 1) b
+    lId <- borrow (AccessionId 1) (PersonId 1) b d
     findLoanByLoanId lId
   printEnding
 
@@ -74,13 +69,24 @@ eg_return = do
     _ -> putStrLn "ERROR: NO OUTSTANDING LOANS"
   printEnding
 
-eg_allAccessions :: IO ()
-eg_allAccessions = opaleyeExample "All Accessions"
-  accessionQuery
-  accessionsAll
+eg_overdue :: IO ()
+eg_overdue = opaleyeExample "Overdue Books" loansOverdueQuery loansOverdue
 
-eg_allPeople :: IO ()
-eg_allPeople = opaleyeExample "All People" personQuery peopleAll
+eg_bookCount :: IO ()
+eg_bookCount = opaleyeExample "Book Count"
+  (accessionCountForBookQuery $ constant lyahIsbn)
+  (accessionCountForBook lyahIsbn)
 
-eg_allLoans :: IO ()
-eg_allLoans = opaleyeExample "All Loans" loanQuery loansAll
+eg_accessionCountKeywords :: IO ()
+eg_accessionCountKeywords = opaleyeExample "Accession Keyword Grouping"
+  accessionCountsForKeywordQuery
+  accessionCountsForKeyword
+
+-- NOTE: The query in the example output 
+eg_pagination :: IO ()
+eg_pagination = do
+  printTitle "Paginated Programming Books"
+  printOpaleye $ booksWithKeywordPaginated (Pagination 1 5) "Programming"
+  printOpaleye $ booksWithKeywordPaginated (Pagination 2 5) "Programming"
+  printOpaleye $ booksWithKeywordPaginated (Pagination 3 5) "Programming"
+  printEnding

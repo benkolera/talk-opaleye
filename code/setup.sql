@@ -29,6 +29,7 @@ CREATE TABLE loan
 , person_id    INTEGER     NOT NULL REFERENCES person(id)
 , accession_id INTEGER     NOT NULL REFERENCES accession(id)
 , borrowed     TIMESTAMPTZ NOT NULL
+, due          TIMESTAMPTZ NOT NULL
 , returned     TIMESTAMPTZ
 );
 
@@ -84,6 +85,7 @@ INSERT INTO book_keyword (book_isbn,keyword) VALUES
 ;
 
 INSERT INTO accession (book_isbn) (SELECT isbn FROM book);
+INSERT INTO accession (book_isbn) VALUES (9781593272838);
 
 INSERT INTO person (name) VALUES
   ('Ben Kolera')
@@ -94,14 +96,14 @@ INSERT INTO person (name) VALUES
 , ('Oliver Queen')
 ;
 
-INSERT INTO loan (person_id,accession_id,borrowed,returned)
-( SELECT person.id,accession.id,'2015-07-01','2015-08-01'
+INSERT INTO loan (person_id,accession_id,borrowed,due,returned)
+( SELECT person.id,accession.id,'2015-07-01','2015-08-01','2015-07-22'
   FROM person , accession
   WHERE person.name = 'Hank McCoy'
 );
 
-INSERT INTO loan (person_id,accession_id,borrowed)
-( SELECT person.id,accession.id,'2015-08-01'
+INSERT INTO loan (person_id,accession_id,borrowed,due)
+( SELECT person.id,accession.id,'2015-08-01','2015-09-01'
 FROM person , accession 
 WHERE person.name = 'Oliver Queen' AND book_isbn = 9780767907699
 );
