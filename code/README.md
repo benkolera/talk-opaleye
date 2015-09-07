@@ -18,15 +18,45 @@ You'll need to edit the connectInfo hardcoded in
 
 And then you'll be able to run / play in the repl
 
+To run all the queries, print the Queries and the output:
 ```
-# Will print out the queries and results from Main.hs
 cabal run 
+```
 
-# Will get a repl that you can play with things, inspect types
+To get a repl that you can inspect types and run things by hand:
+```
 cabal repl
 ```
 
 ## Why Opaleye
+
+Opaleye is an embedded DSL written in Haskell that generates SQL and runs it
+against a postgres database. It focuses on:
+
+- Fine grained composability of query elements
+- Being true to SQL and offering all of SQLs awesome features (joins,
+aggregations, etc)
+- While maintaining a typesafe API that will not generate SQL that fails at
+runtime.
+
+While it takes some getting used to, it also manages this safety and
+composability with an API isn't super scary to use or decipher type errors from.
+
+This is an awesome thing, because so many applications talk to databases and it
+has always been saddening to get hit with the same old tradeoffs / problems:
+
+- Raw SQL is easy but not safely composable
+- Some things restrict what you can do so you lose valuable parts of SQL
+(joins,aggregations, etc)
+- Some things need your data types constrained so much that it's impractical to
+  use the library without giving up a lot of control to the libraries template
+  haskell functions.
+- The API can still generate SQL that fails at runtime.
+- Or even if it can do all of that, the density of the API and type errors make
+  you angry and go back to one of the less-safe-but-easier options.
+
+Opaleye achieves all of its goals without any of these tradeoffs, which (I
+think) is super exciting and worth your time to check it out! :smile:
 
 ## Table Definition
 
