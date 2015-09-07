@@ -5,7 +5,7 @@ module OpalLib.Ids where
 
 import Data.Int                        (Int64)
 import Data.Profunctor.Product.TH      (makeAdaptorAndInstance)  
-import Opaleye                         (PGInt8,PGInt4,Column)
+import Opaleye                         (PGInt8,PGInt4,Column,Nullable)
 
 -- Accession ID ----------------------------------------------------------
 
@@ -15,6 +15,7 @@ makeAdaptorAndInstance "pAccessionId" ''AccessionId'
 type AccessionId = AccessionId' Int
 type AccessionIdColumn = AccessionId' (Column PGInt4)
 type AccessionIdColumnMaybe = AccessionId' (Maybe (Column PGInt4))
+type AccessionIdColumnNullable = AccessionId' (Column (Nullable PGInt4))
 
 -- ISBN ------------------------------------------------------------------
 
@@ -32,6 +33,7 @@ makeAdaptorAndInstance "pLoanId" ''LoanId'
 type LoanId = LoanId' Int
 type LoanIdColumn = LoanId' (Column PGInt4)
 type LoanIdColumnMaybe = LoanId' (Maybe (Column PGInt4))
+type LoanIdColumnNullable = LoanId' (Column (Nullable PGInt4))
 
 -- Person ID -------------------------------------------------------------
 
@@ -41,3 +43,4 @@ makeAdaptorAndInstance "pPersonId" ''PersonId'
 type PersonId = PersonId' Int
 type PersonIdColumn = PersonId' (Column PGInt4)
 type PersonIdColumnMaybe = PersonId' (Maybe (Column PGInt4))
+type PersonIdColumnNullable = PersonId' (Column (Nullable PGInt4))

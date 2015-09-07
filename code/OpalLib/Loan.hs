@@ -59,6 +59,14 @@ type Loan = Loan'
   UTCTime
   (Maybe UTCTime)
 
+type LoanColumnsNullable = Loan'
+  LoanIdColumnNullable
+  PersonIdColumnNullable
+  AccessionIdColumnNullable
+  (Column (Nullable PGTimestamptz))
+  (Column (Nullable PGTimestamptz))
+  (Column (Nullable PGTimestamptz))
+
 type FullLoanColumns =
   (LoanColumns,AccessionIdColumn,BookColumns,PersonColumns)
 
@@ -128,9 +136,12 @@ borrow aId pId b d =
     , _loanReturned    = null
     }
 
+loanOutstanding :: LoanColumns -> Column PGBool
+loanOutstanding l = l^.loanReturned.to isNull
+
 restrictLoansCurrent :: QueryArr LoanColumns ()
 restrictLoansCurrent = proc (l) -> do
-  restrict -< l^.loanReturned.to isNull
+  restrict -< loanOutstanding l
 
 loansOutstandingQuery :: Query FullLoanColumns
 loansOutstandingQuery = proc () -> do

@@ -32,6 +32,7 @@
 ** Newtypes
 ** No easy way to newtype limited length strings
 ** No easy way to prefetch one to many joins
+** No nice syntax for anchoring like queries.
 * Conclusion
 ** 
 ** Profunctors & Product Profunctors are the secret sauce

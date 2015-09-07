@@ -32,7 +32,7 @@ countQuery :: (a -> Column i) -> Query a -> Query (Column PGInt8)
 countQuery getId = aggregate count . fmap getId
 
 paginationResults :: Pagination -> Maybe Int64 -> [a] -> PaginationResults a
-paginationResults (Pagination pw pp) cMay res = PaginationResults pp pw pm res
+paginationResults (Pagination pp pw) cMay res = PaginationResults pp pw pm res
   where
     pm = maybe 0 pageCount cMay
     pageCount :: Int64 -> Int64

@@ -10,6 +10,7 @@ import OpalLib.Book
 import OpalLib.Ids
 import OpalLib.Loan
 import OpalLib.Pagination
+import OpalLib.Search
 import OpalLib.Util
 
 main :: IO ()
@@ -24,6 +25,8 @@ main = do
   eg_bookCount
   eg_accessionCountKeywords
   eg_pagination
+  eg_search
+  eg_searchPaginated
 
 lyahIsbn :: Isbn
 lyahIsbn = Isbn 9781593272838
@@ -89,4 +92,22 @@ eg_pagination = do
   printOpaleye $ booksWithKeywordPaginated (Pagination 1 5) "Programming"
   printOpaleye $ booksWithKeywordPaginated (Pagination 2 5) "Programming"
   printOpaleye $ booksWithKeywordPaginated (Pagination 3 5) "Programming"
+  printEnding
+
+eg_search :: IO ()
+eg_search = do
+  let s1 = Search (Just "Great Good") [] False
+  opaleyeExample "Search Title" (searchQuery s1) (search s1)
+  let s2 = Search Nothing ["Management"] False
+  opaleyeExample "Search Keyword" (searchQuery s2) (search s2)
+  let s3 = Search Nothing ["Management"] True
+  opaleyeExample "Search Keyword" (searchQuery s3) (search s3)
+
+eg_searchPaginated :: IO ()
+eg_searchPaginated = do
+  let s1 = Search Nothing ["Programming"] False
+  printTitle "Search Programming Paginated"
+  printOpaleye $ searchPaginated (Pagination 1 5) s1
+  printOpaleye $ searchPaginated (Pagination 2 5) s1
+  printOpaleye $ searchPaginated (Pagination 3 5) s1
   printEnding
