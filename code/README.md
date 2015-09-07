@@ -371,7 +371,7 @@ Constant is the opposite of QueryRunnerDefault. It goes from a haskell value to
 a literal column(s). Here we are turning the Isbn with a haskell Int64 inside it
 to a Isbn' (Column PGInt8).
 
-More info in (OpalLib.Book)[OpalLib/Book.hs].
+More info in [OpalLib.Book](OpalLib/Book.hs).
 
 ### Arrows
 
@@ -470,13 +470,73 @@ booksWithKeywordQuery kw = proc () -> do
 
 All of these generate exactly the same SQL.
 
-More info in (OpalLib.Book)[OpalLib/Book.hs].
+More info in [OpalLib.Book](OpalLib/Book.hs).
 
 ## Inserts / Updates
 
+Generating queries is great, but we are going to need to insert and change data
+at some point! We'll experiment with this by writing a function to loan
+accessions (an copy of a book) out.
+
+See [OpalLib.Loan](OpalLib/Loan.hs) for the full code.
+
 ### insert
 
+```haskell
+borrow
+  :: CanOpaleye c e m
+  => AccessionId 
+  -> PersonId
+  -> UTCTime
+  -> UTCTime
+  -> m LoanId
+borrow aId pId b d =
+  fmap head $ liftInsertReturning loanTable (^.loanId) $ Loan
+    { _loanId          = LoanId Nothing
+    , _loanPersonId    = constant pId
+    , _loanAccessionId = constant aId
+    , _loanBorrowed    = constant b
+    , _loanDue         = constant d
+    , _loanReturned    = null
+    }
+```
+
+Lets break this down from right to left:
+
+- We create a Loan to insert with a default id and a null returned date
+- We insert that into the loan table returning the new id
+- We are only every gonna get one and only one of them but liftInsertReturning
+  returns a list; so fix that. :wink:
+
+Generates the SQL that you'd expect:
+
+```sql
+INSERT INTO loan (id,person_id,accession_id,borrowed,due,returned)
+VALUES (null,1,1,'2015-08-01','2015-09-01',null)
+RETURNING id
+```
+
 ### update
+
+```haskell
+loanReturn :: CanOpaleye c e m => LoanId -> UTCTime -> m ()
+loanReturn lId r = void $ liftUpdate loanTable
+  (  (loanId %~ pLoanId (LoanId Just))
+   . (loanReturned .~ toNullable (constant r))
+  )
+  (\ l -> l^.loanId.to unLoanId .== unLoanId (constant lId))
+```
+
+From right to left:
+
+- Updating the loan table where the id = the input loan
+- The 2nd argument to liftUpdate is a function from LoanColumns ->
+  LoanInsertColumns so we have to wrap the current loan id in Just as well as
+  set the returned date that we wanted to do.
+
+```(%~)``` and ```(.~)``` are lens functions that modify the current value with
+a function and set the current value to a constant (respectively). To learn
+more, delve into the wonderful world of [lens](http://hackage.haskell.org/package/lens)
 
 ## Aggregation
 
