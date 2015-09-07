@@ -468,7 +468,7 @@ booksWithKeywordQuery kw = proc () -> do
   returnA -< b
 ```
 
-All of these generate exactly the same SQL.
+All of these generate exactly the same SQL; which is awesome! 
 
 More info in [OpalLib.Book](OpalLib/Book.hs).
 
@@ -540,21 +540,254 @@ more, delve into the wonderful world of [lens](http://hackage.haskell.org/packag
 
 ## Aggregation
 
+Aggregation is one of the things that make SQL an awesome reporting / data
+processing language. And the fact that opaleye manages to offer all the
+aggregate functions without sacrificing any type safety is really the cream on
+the cake of this awesome DSL. :smile:
+
 ### count
 
-### aggregate / Aggregator
+Lets start off with a simple count of accessions.
+
+```haskell
+accessionsForBookQuery :: IsbnColumn -> Query (AccessionIdColumn,BookColumns)
+accessionsForBookQuery isbn = proc () -> do
+  t <- accessionsWithBookQuery -< ()
+  restrict -< t^._2.bookIsbn.to unIsbn .== unIsbn isbn
+  returnA -< t
+
+accessionCountForBookQuery :: IsbnColumn -> Query (Column PGInt8)
+accessionCountForBookQuery =
+  aggregate count . fmap (^._1.to unAccessionId) . accessionsForBookQuery
+```
+
+aggregate takes an Aggregate a and a Query a, and is a product profunctor
+so if there are more than one columns you can supply and aggregate function for
+each hole with an appropriate pAccession or pN call.
+
+```sql
+SELECT "result0_3" as "result1_4"
+FROM (SELECT *
+      FROM (SELECT COUNT("id0_1") as "result0_3"
+            FROM (SELECT *
+                  FROM (SELECT "id" as "id0_1",
+                               "book_isbn" as "book_isbn1_1"
+                        FROM "accession" as "T1") as "T1",
+                       (SELECT "isbn" as "isbn0_2",
+                               "title" as "title1_2"
+                        FROM "book" as "T1") as "T2"
+                  WHERE (("isbn0_2") = 9781593272838) AND (("book_isbn1_1") = ("isbn0_2"))) as "T1"
+            GROUP BY COALESCE(0)) as "T1") as "T1"
+```
+
+Also don't forget that Querys are Functors so we can just fmap the result rather
+than breaking out into arrow syntax. They are also Profunctors,Applicatives and
+even Categories (you can compose them e.g. ```QueryArr a b -> QueryArr b c ->
+QueryArr a c) !!
 
 ### groupBy
 
+Now to group by is as simple as returning multiple columns and grouping by the
+ones that you want.
+
+```haskell
+accessionCountsForKeywordQuery :: Query (Column PGText,Column PGInt8)
+accessionCountsForKeywordQuery =
+  orderBy (desc (^._2)) . aggregate (p2 (groupBy,count)) $ proc () -> do
+    (aId,b) <- accessionsWithBookQuery -< ()
+    k       <- bookKeywordJoin -< b
+    returnA -< (k,aId^.to unAccessionId)
+```
+
+```sql
+SELECT "result0_4" as "result1_5",
+       "result1_4" as "result2_5"
+FROM (SELECT *
+      FROM (SELECT *
+            FROM (SELECT *
+                  FROM (SELECT "keyword1_3" as "result0_4",
+                               COUNT("id0_1") as "result1_4"
+                        FROM (SELECT *
+                              FROM (SELECT "id" as "id0_1",
+                                           "book_isbn" as "book_isbn1_1"
+                                    FROM "accession" as "T1") as "T1",
+                                   (SELECT "isbn" as "isbn0_2",
+                                           "title" as "title1_2"
+                                    FROM "book" as "T1") as "T2",
+                                   (SELECT "book_isbn" as "book_isbn0_3",
+                                           "keyword" as "keyword1_3"
+                                    FROM "book_keyword" as "T1") as "T3"
+                              WHERE (("isbn0_2") = ("book_isbn0_3")) AND (("book_isbn1_1") = ("isbn0_2"))) as "T1"
+                        GROUP BY "keyword1_3") as "T1") as "T1"
+            ORDER BY "result1_4" DESC NULLS FIRST) as "T1") as "T1"
+```
+
 ### other Aggregate Functions
+
+There are lots of other aggregate functions defined in
+[Opaleye.Aggregate](http://hackage.haskell.org/package/opaleye-0.4.1.0/docs/Opaleye-Aggregate.html):
+
+- sum
+- avg
+- max
+- min
+- boolOr    (any)
+- boolAnd   (all)
+- arrayAgg  (Column a -> Column (PGArray a))
+- stringAgg (array_to_string)
 
 ### pagination
 
+Pagination is a very common thing that otherwise needs lots of repetition or
+ugly hacks. Wouldn't it be great if you you write it once for any query and
+repeat easily compose it into any query?
+
+Lets define 
+
+```haskell
+data Pagination = Pagination
+  { _paginationPage  :: Int
+  , _paginationWidth :: Int
+  }
+makeLenses ''Pagination
+
+data PaginationResults a = PaginationResults
+  { _paginationResultsPage    :: Int
+  , _paginationResultsWidth   :: Int
+  , _paginationResultsMaxPage :: Int64
+  , _paginationResultsRows    :: [a]
+  } deriving (Show,Functor)
+makeLenses ''PaginationResults
+```
+
+We can simply limit an offset any Query a with functions from opaleye:
+
+```haskell
+paginateQuery :: Pagination -> Query a -> Query a
+paginateQuery (Pagination p w) = limit w . offset ((p-1) * w)
+```
+
+And we know how to count a column, so we can count any query if we have a way to
+get a countable column from it.
+
+```haskell
+countQuery :: (a -> Column i) -> Query a -> Query (Column PGInt8)
+countQuery getId = aggregate count . fmap getId
+```
+
+And then gluing these together into grab the current page and the full total is
+a piece of cake.
+
+```haskell
+paginate
+  :: (CanOpaleye c e m, Default QueryRunner a b)
+  => Pagination
+  -> (a -> Column i)
+  -> Query a
+  -> m (PaginationResults b)
+paginate p getId q = paginationResults p
+  <$> liftQueryFirst (countQuery getId q)
+  <*> liftQuery      (paginateQuery p q)
+```
+
+Mixing this into a query is easy.
+
+```haskell
+booksWithKeywordPaginated
+  :: CanOpaleye c e m
+  => Pagination
+  -> Text
+  -> m (PaginationResults Book)
+booksWithKeywordPaginated p
+  = paginate p (^.bookIsbn.to unIsbn) . booksWithKeywordQuery . constant
+
+-- The old version was : booksWithKeywordQuery . constant
+```
+
+See [OpalLib.Pagination](OpalLib/Pagination.hs) for the full story and
+[OpalLib.Book](OpalLib/Book.hs) for the paginated book call.
+
 ## The Big Finale
 
-### search
+The most hideous part of many a webapps is usually some search or report that
+has to configurably search on different fields. Lets give this a whirl in OpalLib.
 
-### paginated search
+Our search terms:
+
+```haskell
+data Search = Search
+  { _searchTitle         :: Maybe Text
+  , _searchKeywords      :: [Text]
+  , _searchAvailableOnly :: Bool
+  }
+makeLenses ''Search
+```
+
+First we are going to need a gnarly left join to the Loan table to get a
+nullable due date (if there is a current loan against the accession).
+
+```haskell
+accessionWithDueDateQuery :: Query (AccessionIdColumn,BookColumns,Column (Nullable PGTimestamptz))
+accessionWithDueDateQuery = fmap project
+  . leftJoin accessionsWithBookQuery loanQuery
+  $ \ ((a,_),l) ->
+    unAccessionId a .== l^.loanAccessionId.to unAccessionId 
+    .&& loanOutstanding l
+  where
+    project :: ((AccessionIdColumn,BookColumns),LoanColumnsNullable)
+            -> (AccessionIdColumn,BookColumns,Column (Nullable PGTimestamptz))
+    project = (\ ((a,b),l) -> (a,b,l^.loanDue))
+```
+
+Then do query full of all of the accession ids and array of keywords:
+
+```haskell
+searchAccessionIdQuery
+  :: Search
+  -> Query (AccessionIdColumn,Column (PGArray PGText))
+searchAccessionIdQuery s = aggregate agg $ proc () -> do
+  (a,b,l) <- accessionWithDueDateQuery -< ()
+  k <- bookKeywordJoin -< b
+  restrictMaybe likeTitle (s^.searchTitle) -< b
+  restrict -< bool (constant True) (isNull l) (s^.searchAvailableOnly)
+  restrictMaybe (\ k kws -> in_ (constant <$> kws) k) (nonEmpty $ s^.searchKeywords) -< k
+  returnA -< (a,k)
+  where
+    agg = p2 (pAccessionId $ AccessionId groupBy, arrayAgg)
+    likeTitle b t = (b^.bookTitle) `like` (constant $ "%" <> t <> "%")
+```
+
+(Okay, so that's poorly factored and we start to see Arrows get in the way of
+our usual toolbox [namely not being able to use Data.Foldable.traverse_])
+
+But then we can easily get back the accessionId,book,due date and keywords
+reusing a lot of stuff.
+
+```haskell
+searchQuery :: Search -> Query SearchResultColumns
+searchQuery s = proc () -> do
+  (a,b,l)   <- accessionWithDueDateQuery -< ()
+  (aId,kws) <- searchAccessionIdQuery s -< ()
+  restrict  -< unAccessionId aId .== unAccessionId a
+  returnA   -< SearchResult a b kws l
+```
+
+And hey, we can even paginate it without a hassle:
+
+```haskell
+searchPaginated
+  :: CanOpaleye c e m
+  => Pagination
+  -> Search
+  -> m (PaginationResults SearchResult)
+searchPaginated p s = paginate p
+  (^.searchResultAccessionId.to unAccessionId)
+  (searchQuery s)
+```
+
+Boom! :wink:
+
+Details in [OpalLib.Search](OpalLib/Search.hs)
 
 ## Room For Improvement
 

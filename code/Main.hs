@@ -23,7 +23,7 @@ main = do
   eg_borrow
   eg_return
   eg_overdue
-  eg_bookCount
+  eg_accessionCount
   eg_accessionCountKeywords
   eg_pagination
   eg_search
@@ -79,8 +79,8 @@ eg_return = do
 eg_overdue :: IO ()
 eg_overdue = opaleyeExample "Overdue Books" loansOverdueQuery loansOverdue
 
-eg_bookCount :: IO ()
-eg_bookCount = opaleyeExample "Book Count"
+eg_accessionCount :: IO ()
+eg_accessionCount = opaleyeExample "Accession Count"
   (accessionCountForBookQuery $ constant lyahIsbn)
   (accessionCountForBook lyahIsbn)
 

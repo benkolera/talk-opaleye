@@ -61,7 +61,8 @@ accessionWithDueDateQuery = fmap project
     unAccessionId a .== l^.loanAccessionId.to unAccessionId 
     .&& loanOutstanding l
   where
-    project :: ((AccessionIdColumn,BookColumns),LoanColumnsNullable) -> (AccessionIdColumn,BookColumns,Column (Nullable PGTimestamptz))
+    project :: ((AccessionIdColumn,BookColumns),LoanColumnsNullable)
+            -> (AccessionIdColumn,BookColumns,Column (Nullable PGTimestamptz))
     project = (\ ((a,b),l) -> (a,b,l^.loanDue))
 
 searchAccessionIdQuery
