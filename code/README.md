@@ -57,6 +57,42 @@ think) is super exciting and worth your time to check it out! :smile:
 
 ### Record Definition
 
+First we define a datatype with a hole record accessor and a type parameter for
+each column. This seems crazy at first, but it makes a lot of sense later!
+
+```
+data Book' a b = Book
+  { _bookIsbn  :: a
+  , _bookTitle :: b
+  } deriving Show
+makeLenses ''Book'
+```
+
+We then make shorthand types for the database types (Columns) and the types that
+we want to end up with once we run our query.
+
+```
+type BookColumns = Book' IsbnColumn (Column PGText)
+type Book = Book' Isbn Text
+```
+
+See [http://hackage.haskell.org/package/opaleye-0.4.1.0/docs/Opaleye-PGTypes.html](Opaleye.PGTypes)
+for the full list of column types.
+
+We then line these columns up to a table and column names with a table definition.
+
+```
+makeAdaptorAndInstance "pBook" ''Book'
+
+bookTable :: Table BookColumns BookColumns
+bookTable = Table "book" $ pBook Book
+  { _bookIsbn  = pIsbn . Isbn $ required "isbn"
+  , _bookTitle = required "title"
+  }
+```
+
+[OpalLib/Book.hs](See in full in Book.hs)
+
 ### Isomorphic to a Tuple
 
 ### Product Profunctor
@@ -122,6 +158,21 @@ think) is super exciting and worth your time to check it out! :smile:
 ### Prefetching
 
 ### Like anchoring / escaping
+
+## Wrap Up
+
+Core concepts:
+
+- Table: Sources the table name, column names, insert column types and read
+column types.
+- Column: An expression inside an SQL query (Literal,ColumnName,Compound
+Expression)
+- Query o: A query that we can either join to another query, restrict or run on
+the database.
+to do its bit.
+- ProductProfunctor: Magic sauce for transforming each column in a record or
+  tuple. Depending on the profunctor, lots of different things can be done
+  (UnpackSpec,Constant,Aggregation,etc.).
 
 ## Acknowledgements & Further Resources
 
