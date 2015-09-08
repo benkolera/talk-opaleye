@@ -380,7 +380,7 @@ More info in [OpalLib.Book](OpalLib/Book.hs).
 We don't need to get into the nitty gritty details of arrows but it is
 worthwhile noting some points.
 
-The query generation is purposefully not a monad and (at least my intuition) is
+The query generation is purposefully not a monad and that is (at least my intuition)
 that the arbitrary nesting of monadic computation gets you into trouble by
 allowing you to refer to things that aren't actually valid any more (because
 they are in a subquery and weren't projected/aggregated out of the query, etc).
@@ -397,6 +397,12 @@ our safety!
 
 Side note, Query is just an alias for a QueryArr with no input:
 type Query a = QueryArr () a
+
+And if none of that makes sense, just know that you can safely treat Arrow notation
+just like a monadic do. You'll eventually realise this is a lie when you get a
+"Variable x is not defined" error when you try and use a bound output in an
+arrow body, but by that time you'll have enough other understanding that it'll
+click at that point. :smile:
 
 ### Projection
 
