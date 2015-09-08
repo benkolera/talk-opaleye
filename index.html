@@ -562,6 +562,55 @@ booksWithKeywordQuery kw = proc () -> do
                     <section>
                         <h1>Updates &amp; Insertions</h1>
                     </section>
+                    <section>
+                        <p>Insert</p>
+                        <br/>
+                        <pre class="highlight haskell">
+borrow
+  :: CanOpaleye c e m
+  => AccessionId 
+  -> PersonId
+  -> UTCTime
+  -> UTCTime
+  -> m LoanId
+borrow aId pId b d =
+  <span class="fragment" data-fragment-index="2">fmap head</span>
+  . <span class="fragment" data-fragment-index="1">liftInsertReturning loanTable (^.loanId)</span>
+  $ <span class="fragment" data-fragment-index="0">Loan
+    { _loanId          = LoanId Nothing
+    , _loanPersonId    = constant pId
+    , _loanAccessionId = constant aId
+    , _loanBorrowed    = constant b
+    , _loanDue         = constant d
+    , _loanReturned    = null
+    }</span>
+                        </pre>
+                        <aside class="notes">
+                            <p>Inserting is actually pretty easy. Lets make a borrow function.</p>
+                            <p>Make the loan that we want to insert</p>
+                            <p>liftInsertReturning on the loan table selecting the id</p> 
+                            <p>And then given that will only ever return 1 row, fix that</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>Update</p>
+                        <br/>
+                        <pre class="highlight haskell">
+loanReturn :: CanOpaleye c e m => LoanId -> UTCTime -> m ()
+loanReturn lId r = <span class="fragment" data-fragment-index="0">void $ liftUpdate loanTable</span>
+  (  <span class="fragment" data-fragment-index="3">(loanId %~ pLoanId (LoanId Just))</span>
+   . <span class="fragment" data-fragment-index="2">(loanReturned .~ toNullable (constant r))</span>
+  )
+  <span class="fragment" data-fragment-index="1">(\ l -> l^.loanId.to unLoanId .== unLoanId (constant lId))</span>
+                        </pre>
+                        <aside class="notes">
+                            <p>Lets write a function to return a book.</p>
+                            <p>We want to update the loan table</p>
+                            <p>Where the id matches the one we want</p>
+                            <p>Set our returned to be the date given.</p>
+                            <p>Do some unfortunate ceremony with the optional write id.</p>
+                        </aside>
+                    </section>
                 </section>
                 <section>
                     <section>
@@ -764,7 +813,26 @@ booksWithKeywordPaginated p
                 </section>
                 <section>
                     <section>
-                        <h1>Conclusions</h1>
+                        <h1>Wrap Up</h1>
+                    </section>
+                    <section>
+                        <p>It's SQL without losing any valuable parts of SQL.</p>
+                    </section>
+                    <section>
+                        <p>It composes awesomely.</p>
+                    </section>
+                    <section>
+                        <p>And there aren't many ways it can go wrong at runtime.</p>
+                    </section>
+                    <section>
+                        <p>While you have to learn profunctors along the way, it's pretty digestable.</p>
+                    </section>
+                    <section>
+                        <p>I'm excited!</p>
+                        <br/>
+                        <p class="fragment">And I hope that you are too!</p>
+                        <br/>
+                        <p class="fragment">Because even if you don't use DBs it's still awesome to see how useful haskell can be.</p>
                     </section>
                 </section>
                 <section style="text-align: left;">
