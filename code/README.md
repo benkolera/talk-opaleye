@@ -377,7 +377,26 @@ More info in [OpalLib.Book](OpalLib/Book.hs).
 
 ### Arrows
 
-TODO
+We don't need to get into the nitty gritty details of arrows but it is
+worthwhile noting some points.
+
+The query generation is purposefully not a monad and (at least my intuition) is
+that the arbitrary nesting of monadic computation gets you into trouble by
+allowing you to refer to things that aren't actually valid any more (because
+they are in a subquery and weren't projected/aggregated out of the query, etc).
+
+The main thing to note about arrows is that they are much more like Applicative
+in that the computation branches out but doesn't nest (no join), so things only
+flow from one context to the other.
+
+In the arrow syntax, the arrow has Input, does some work with that input (or
+variable in scope out of the arrow comprehension entirely) and produces an
+output. That means that each arrow has complete control over what columns
+further queries can see and use later on down the track, which gives us a lot of
+our safety!
+
+Side note, Query is just an alias for a QueryArr with no input:
+type Query a = QueryArr () a
 
 ### Projection
 
