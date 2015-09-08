@@ -186,10 +186,10 @@ there is some extra unwrapping in places that you don't actually want it. Like
 what we saw in the table definition:
 
 ```haskell
-bookTable = Table "book" $ p2
-  ( pIsbn . Isbn $ required "isbn"
-  , required "title"
-  )
+bookTable = Table "book" . pBook $ Book
+  { _bookIsbn  = pIsbn . Isbn $ required "isbn"
+  , _bookTitle = required "title"
+  }
 ```
 
 And it's also annoying once you start have the column be autoincrementing or
@@ -206,6 +206,8 @@ type parameter is for noting that some of the columns for insertion are optional
 because the database will default the value (sequence based id, etc.).
 
 ```haskell
+type PersonIdColumnMaybe = PersonId' (Maybe (Column PGInt4))
+
 type PersonColumns = Person' PersonIdColumn (Column PGText)
 type PersonInsertColumns = Person' PersonIdColumnMaybe (Column PGText)
 type Person = Person' PersonId Text
@@ -294,10 +296,10 @@ transformation between each column and the haskell type then it'll all just work
 Lets see it in action:
 
 ```haskell
-type IsbnColumn = Isbn' (Column PGInt8)
+type IsbnColumn  = Isbn' (Column PGInt8)
 type BookColumns = Book' IsbnColumn (Column PGText)
 
-type Isbn       = Isbn' Int64
+type Isbn = Isbn' Int64
 type Book = Book' Isbn Text
 
 booksAll :: Connection -> IO Book
@@ -435,18 +437,18 @@ But the above example would get clunky if you had to join to keyword lots. Lets
 refactor it out so that we can reuse it elsewhere.
 
 ```haskell
+booksWithKeywordQuery :: Column PGText -> Query BookColumns
+booksWithKeywordQuery kw = proc () -> do
+  b  <- bookQuery       -< ()
+  k  <- bookKeywordJoin -< (b)
+  restrict -< k .== kw
+  returnA -< b
+  
 bookKeywordJoin :: QueryArr BookColumns (Column PGText)
 bookKeywordJoin = proc (b) -> do
   k <- bookKeywordQuery -< ()
   restrict -< b^.bookIsbn.to unIsbn .== k^.bookKeywordBookIsbn.to unIsbn
   returnA -< k^.bookKeywordKeyword
-
-booksWithKeywordQuery :: Column PGText -> Query BookColumns
-booksWithKeywordQuery kw = proc () -> do
-  b  <- bookQuery       -< ()
-  k  <- bookKeywordJoin -< ()
-  restrict -< k .== kw
-  returnA -< b
 ```
 
 And if we are restricting lots based on keywords we can even make that part
@@ -801,6 +803,16 @@ for improvement in Opaleye.
 These could be my inexperience or they could be just be because someone hasn't
 needed them yet. Given that opaleye is still pretty young I'm sure some of these
 have some clever fixes.
+
+### The schema on the DB could be different
+
+Nothing out of the box checks the schema on boot of your programing / in test cases,
+so if your tables aren't there or you messed up the table/column names your stuff will
+break at runtime.
+
+A really cool thing would be something that you could give a list of tables to and it'd
+go and check that the tables actually line up. Something that you could do when your app
+started up so it could squawk if the DB wasn't using the right schema before it goes live.
 
 ### Dates
 

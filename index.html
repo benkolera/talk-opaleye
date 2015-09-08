@@ -15,7 +15,8 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui">
 
         <link rel="stylesheet" href="css/reveal.css">
-        <link rel="stylesheet" href="css/theme/sky.css" id="theme">
+        <link rel="stylesheet" href="css/bens.css">
+        <link rel="stylesheet" href="css/theme/white.css" id="theme">
 
         <!-- Code syntax highlighting -->
         <link rel="stylesheet" href="lib/css/zenburn.css">
@@ -96,7 +97,7 @@
                     <section>
                         <p>Had a very similar experience with HaskellDB</p>
                         <br />
-                        <p class="fragment current-visible">DSL Forced you to understand a lot of its innards to abstract and figure out compile errors.</p>
+                        <p class="fragment current-visible">DSL forced you to understand a lot of its innards to abstract and figure out compile errors.</p>
                         <p class="fragment current-visible">Innards were complicated and a bit weird, too.</p>
                         <p class="fragment current-visible">Could still generate bad SQL at runtime</p>
                     </section>
@@ -154,20 +155,407 @@
                                 <li class="fragment">Give you enough understanding to give it a try.</li>
                             </ul>
                         </p>
+                        <br/>
+                        <p class="fragment">Feel free ask questions or heckle if I'm failing either of these.</p>
+                    </section>
+                    <section>
+                        <p>Talk Structure</p>
+                        <br/>
+                        <p class="fragment current-visible">We are going to take a walk through the concepts and interesting parts of opaleye.</p>
+                        <p class="fragment current-visible">We'll skim over some details to keep things neat</p>
+                        <p class="fragment current-visible">There is a longer form tutorial and code examples on my github to follow.</p>
+                        <p class="fragment current-visible">These slides should be useless after the talk. :)</p>
                     </section>
                 </section>
                 <section>
                     <section>
-                        <h1>Table Definition</h1>
+                        <h1>Schema Definition</h1>
                     </section>
                     <section>
-                        <pre><code class="haskell">
-</code></pre>
+                        <p>Table Records</p>
+                        <pre class="highlight haskell">data Book' a b <span class="fragment">= Book
+  { _bookIsbn  :: a
+  , _bookTitle :: b
+  } deriving Show </span>
+
+<span class="fragment">makeLenses ''Book'
+</pre>
+                        <aside class="notes">
+                            <p>Define a datatype with a type parameter for each column</p>
+                            <p>And an accessor</p>
+                            <p>And then add some lenses to make things easier</p>
+                            <p>It's a bit weird at first, but it starts making lots of sense!</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>Column Types</p>
+                        <pre class="highlight haskell">type BookColumns = Book' IsbnColumn (Column PGText)
+
+<span class="fragment">type Book = Book' Isbn Text</span></code></pre>
+                        <br />
+                        <p class="fragment">See <a target="_blank" href="http://hackage.haskell.org/package/opaleye-0.4.1.0/docs/Opaleye-PGTypes.html">Opaleye.PGTypes</a> for all the precanned column types.</p>
+                        <aside class="notes">
+                            <p>Then make shorthand types for database types.</p>
+                            <p>And the types we want to get out in haskell land</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>Table Definition</p>
+                        <pre class="highlight haskell">makeAdaptorAndInstance "pBook" ''Book'
+
+<span class="fragment">bookTable :: Table BookColumns BookColumns
+bookTable = </span><span class="fragment">Table "book" $ pBook Book</span><span class="fragment">
+  { _bookIsbn  = pIsbn . Isbn $ required "isbn"
+  , _bookTitle = required "title"
+  }</span></pre>
+                        <aside class="notes">
+                            <p>First we have to run some weird template haskell (more on that later).
+                            <p>We then create our table definition</p>
+                            <p>By giving a table name</p>
+                            <p>And a name for each of the columns</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>Isomorphic to Tuples</p>
+                        <pre class="highlight haskell">type Book' a b = (a,b)
+
+<span class="fragment">type BookColumns = (IsbnColumn,(Column PGText))
+type Book = (Isbn,Text)</span>
+
+<span class="fragment">bookTable :: Table BookColums BookColumns
+bookTable = Table "book" $ p2
+  ( pIsbn . Isbn $ required "isbn"
+  , required "title"
+  )</span></pre>
+                        <aside class="notes">
+                            <p>These records are isomorphic to tuples. They just have names.</p>
+                            <p>We could defined our table and column type as a tuple</p>
+                            <p>And make the table definition this way.</p>
+                            <p>Data.Profunctor.Product defines p2 .. p26</p>
+                            <p>Names are useful for tables, but the isomorphism is handy once you start projecting columns.</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>Product Profunctors?!?</p>
+                        <pre class="highlight haskell">λ> :t pBook
+  :: Data.Profunctor.Product.ProductProfunctor p =>
+     Book' <span class="fragment">(p a1 a2)</span> <span class="fragment">(p b1 b2)</span>
+     <span class="fragment">-> p (Book' a1 b1) (Book' a2 b2)</span>
+
+<span class="fragment">λ> :t p2
+  :: ProductProfunctor p =>
+     (p a1 a2, p b2 b2)
+    -> p (a1, b1) (a2, b2)</span>
+                        </pre>
+                        <aside class="notes">
+                            <p>What were those weird pBook and p2 things?</p>
+                            <p>pBook takes a Book' full of two profunctors from p a1 a2 and p b1 b2</p>
+                            <p>And then returns a p (Book a1 b1) (Book a2 b2)</p>
+                            <p>p2 is the same but for a tuple 2</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>(->) is a Profunctor</p>
+                        <pre class="highlight haskell">λ> :t pBook (Book (* 2) (++"bar"))
+  :: Book' Int [Char] -> Book' Int [Char]
+
+<span class="fragment">λ> pBook (Book (* 2) (++"bar")) (Book 2 "foo")
+  Book {_bookIsbn = 4, _bookTitle = "foobar"}</span>
+                        </pre>
+                        <aside class="notes">
+                            <p>Best to think this in terms of a the function profunctor</p>
+                            <p>The result of applying two functions to the first column and second</p>
+                            <p>Is to return a function from Book -> Book which doubles the first col and appends bar to the string</p>
+                            <p>Which can then be applied to a book to do both transformations</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>Profunctors are transformations</p>
+                        <br />
+                        <p class="fragment">Product profunctor applies a profunctor to each hole.</p>
+                        <div class="fragment"><p>Many profunctors in opaleye:</p>
+                            <ul>
+                                <li>TableDefinition</li>
+                                <li>Constant</li>
+                                <li>QueryRunner</li>
+                                <li>Aggregate</li>
+                                <li>And more!</li>
+                            </ul>
+                        </div>
+                        <aside class="notes">
+                            <p>Profunctors are transformations</p>
+                            <p>And the product profunctor allows us to apply these profunctors to each hole of a structure</p> 
+                            <p>And there are many profunctors available in Opaleye</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>Newtypes for ID Columns</p>
+                        <pre class="highlight haskell">data Isbn' a = Isbn { unIsbn :: a } deriving Show
+<span class="fragment">makeAdaptorAndInstance "pIsbn" ''Isbn'</span>
+
+<span class="fragment">type IsbnColumn = Isbn' (Column PGInt8)
+type Isbn       = Isbn' Int64</span>
+
+<span class="fragment">bookTable = Table "book" . pBook $ Book
+  { _bookIsbn  = pIsbn . Isbn $ required "isbn"
+  , _bookTitle = required "title"
+  }</span> 
+                        </pre>
+
+                        <aside class="notes">
+                            <p>For primary keys of tables, in would be un-haskell-like to just PGInt8s</p>
+                            <p>So we wrap it in a data type (should be newtype but the TH is busted)</p>
+                            <p>And we are gonna need to transform it so we make the product profunctor instance.</p> 
+                            <p>And then define our column / haskell types</p>
+                            <p>Then define our table as before nesting profunctors to get into the Isbn</p>
+                            <p>This is a touch clunky, but worth it so you don't accidently join the wrong columns</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>Auto Incrementing IDs / Default Columns</p>
+                        <pre class="highlight haskell"><span class="fragment" data-fragment-index="0">
+type PersonColumns = Person' PersonIdColumn (Column PGText)
+type Person = Person' PersonId Text</span>
+<span class="fragment" data-fragment-index="3">
+type PersonInsertColumns = Person'
+    (PersonId' (Maybe (Column PGInt4)))
+    (Column PGText)</span>
+
+personTable :: Table PersonInsertColumns PersonColumns
+<span class="fragment" data-fragment-index="0">personTable = Table "person" $ pPerson Person
+  { _personId   = pPersonId . PersonId $ <span class="fragment highlight-red" data-fragment-index="1">optional "id"</span>
+  , _personName = required "name"
+  }</span>
+                        </pre>
+                        <aside class="notes">
+                            <p>You'll note that the Table definition has two type params</p> 
+                            <p>First Param indicates the type of the columns that should be inserted.</p>
+                            <p>You can make some optional so you can let the database use default values for them.</p>
+                            <p>Which changes the column to insert to a Maybe (Column a)
+                            <p>OpalLib does this for sequence created ids</p>
+                        </aside>
                     </section>
                 </section>
                 <section>
                     <section>
                         <h1>Querying</h1>
+                        <aside class="notes">
+                            <p>But we're really here for querying, so lets get to what we came here for.</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>queryTable</p>
+                        <pre class="highlight haskell">bookQuery :: Query BookColumns
+bookQuery = queryTable bookTable</pre>
+                        <br/>
+                        <div class="fragment">
+                            <p>Generated SQL:</p>
+                            <pre class="highlight sql">SELECT "isbn0_1" as "result1_2",
+       "title1_1" as "result2_2"
+FROM (SELECT *
+      FROM (SELECT "isbn" as "isbn0_1",
+                   "title" as "title1_1"
+            FROM "book" as "T1") as "T1") as "T1"</pre>
+                        </div>
+                        <aside class="notes">
+                            <p>queryTable takes a table definition and turns it into a select * query</p>
+                            <p>You are then free to use those columns to restrict and project in other queries</p>
+                            <p>The sql that it generates is weird, but correctness is more performant and Opaleye claims that the performance difference between that and the ideal SELECT * should be negligable</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>Columns: Expressions used in restrictions &amp; projections</p>
+                        <br />
+                        <p class="fragment current-visible">Most basic building block</p>
+                        <p class="fragment">Represents a SQL expression 
+                            <ul>
+                                <li class="fragment">Column Ref: Name relating to table select</li>
+                                <li class="fragment">Literal: Literal value in SQL</li>
+                                <li class="fragment">Compound Expr: (e.g: cola .== colb :: Column PGBool)</li>
+                            </ul>
+                        </p>
+                    </section>
+                    <section>
+                        <p>Queries: Complete runnable SQL</p>
+                        <br/>
+                        <p class="fragment current-visible">Can return columns</p>
+                        <p class="fragment">Can be joined to other queries</p>
+                    </section>
+                    <section>
+                        <p>Running Queries</p>
+                        <br/>
+                        <pre class="highlight haskell">runQuery
+  :: <span class="fragment" data-fragment-index="1">Default QueryRunner columns haskells</span>
+  => <span class="fragment" data-fragment-index="0">Connection</span>
+  -> Query columns
+  -> IO [haskells]
+                        </pre>
+                        <aside class="notes">
+                            <p>runQuery will take a Query of columns and return IO [Haskells]</p>
+                            <p>If a connection to the DB is supplied</p>
+                            <p>And there is a default instance for QueryRunner columns haskells</p>
+                            <p>You guessed it: QueryRunner is a profunctor!</p>
+                            <p>Default is just a typeclass to provide the default QueryRunner and give you the ability to supply an explicit one if needed ththrough runQueryExplicit</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>runQuery in Action</p>
+                        <pre class="highlight haskell">booksAll :: Connection -> IO Book
+booksAll c = runQuery c (queryTable bookTable)
+
+<span class="fragment">type IsbnColumn  = Isbn' (Column PGInt8)
+type BookColumns = Book' IsbnColumn (Column PGText)
+
+type Isbn = Isbn' Int64
+type Book = Book' Isbn Text</span>
+
+<span class="fragment">-- There exists:
+-- QueryRunnerColumnDefault PGInt8 Int64
+-- QueryRunnerColumnDefault PGText Text</span>
+                        </pre>
+                        <br/>
+                        <p class="fragment">Look in <a href="http://hackage.haskell.org/package/opaleye-0.4.1.0/docs/Opaleye-Internal-RunQuery.html#t:QueryRunnerColumnDefault" >Opaleye.Internal.RunQuery</a> to see all of these predefined SQL -> Haskell transformations.
+                        <aside class="notes">
+                            <p>Lets see this in action</p>
+                            <p>With column definitions</p>
+                            <p>Can be transformed due to these two QueryRunnerColumnDefault instances</p>
+                            <p>And the magic of product profunctor</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>Restriction</p>
+                        <br />
+                        <pre class="highlight haskell">findBookByIsbnQ :: IsbnColumn -> Query BookColumns
+findBookByIsbnQ isbn = <span class="fragment">proc () -> do</span>
+   <span class="fragment">b <- bookQuery -< ()</span>
+   <span class="fragment">restrict -< unIsbn (b^.bookIsbn) .== unIsbn isbn</span>
+   <span class="fragment">returnA -< b</span>
+                        </pre>
+                        <div class="fragment">
+                        <p>Generated SQL:</p>
+                        <pre class="highlight sql">SELECT "isbn0_1" as "result1_2",
+       "title1_1" as "result2_2"
+FROM (SELECT *
+      FROM (SELECT "isbn" as "isbn0_1",
+                   "title" as "title1_1"
+            FROM "book" as "T1") as "T1"
+      WHERE (("isbn0_1") = 9781593272838)) as "T1"
+                        </pre>
+                        </div>
+                        <aside class="notes">
+                            <p>Say we want to make a query that takes a ISBN and returns the books that match.</p>
+                            <p>We introduce this weird funny syntax</p>
+                            <p>We select all books</p>
+                            <p>We restrict to only the ones that have that isbn</p>
+                            <p>We return the books that match.</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>Projection</p>
+                        <br />
+                        <pre class="highlight haskell">bookTitlesQuery :: Query (Column PGText)
+bookTitlesQuery = proc () -> do
+  b <- bookQuery -< ()
+  returnA -< b^.bookTitle</pre>
+                        <div class="fragment">
+                            <p>Generated SQL:</p>
+                            <pre class="highlight sql">SELECT "title1_1" as "result1_2"
+FROM (SELECT *
+      FROM (SELECT "isbn" as "isbn0_1",
+                   "title" as "title1_1"
+            FROM "book" as "T1") as "T1") as "T1"</pre>
+                        </div>
+                        <aside class="notes">
+                            <p>Our only restriction on output is that the thing is a product profunctor.</p>
+                            <p>Can return single values or tuples rather than the whole table.</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>Join</p>
+                        <br />
+                        <pre class="highlight haskell">booksWithKeywordQuery :: Column PGText -> Query BookColumns
+booksWithKeywordQuery kw = proc () -> do
+  b <- bookQuery        -< ()
+  <span class="fragment">k <- bookKeywordQuery -< ()</span>
+  <span class="fragment">restrict -< b^.bookIsbn.to unIsbn .== k^.bookKeywordBookIsbn.to unIsbn</span>
+  <span class="fragment">restrict -< k^.bookKeywordKeyword .== kw</span>
+  returnA -< b
+                        </pre>
+                        <div class="fragment">
+                            <pre class="highlight sql">SELECT "isbn0_1" as "result1_3",
+       "title1_1" as "result2_3"
+FROM (SELECT *
+      FROM (SELECT "isbn" as "isbn0_1",
+                   "title" as "title1_1"
+            FROM "book" as "T1") as "T1",
+           (SELECT "book_isbn" as "book_isbn0_2",
+                   "keyword" as "keyword1_2"
+            FROM "book_keyword" as "T1") as "T2"
+      WHERE (("keyword1_2") = E'Programming') AND (("isbn0_1") = ("book_isbn0_2"))) as "T1"
+                            </pre>
+                        </div>
+                        <aside class="notes">
+                            <p>Joining is the same but with multiple source queries</p>
+                            <p>Restricting where appropriate to join on the keys</p>
+                            <p>Also can do other non join restrictions, of course.</p>
+                            <p>Generates the SQL that you'd expect.</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>Reusing Joins</p>
+                        <br />
+                        <pre class="highlight haskell"><span class="fragment">booksWithKeywordQuery :: Column PGText -> Query BookColumns
+booksWithKeywordQuery kw = proc () -> do
+  b  <- bookQuery       -< ()
+  k  <- bookKeywordJoin -< (b)
+  restrict -< k .== kw
+  returnA -< b</span>
+
+<span class="fragment">bookKeywordJoin :: QueryArr BookColumns (Column PGText)
+bookKeywordJoin = proc (b) -> do </span>
+  <span class="fragment">k <- bookKeywordQuery -< ()
+  restrict -< b^.bookIsbn.to unIsbn .== k^.bookKeywordBookIsbn.to unIsbn
+  returnA -< k^.bookKeywordKeyword</span>
+                        </pre>
+                        <aside class="notes">
+                            <p>We are going to join a lot, so it'd be nice to refactor the join out.</p>
+                            <p>It'd be nice to be able to write it like this</p>
+                            <p>And we can, by making a QueryArr (query that takes an input).</p>
+                            <p>And returning the keyword column from the table for other queries to reference</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>Belaboring the Reuse Point</p>
+                        <pre class="highlight haskell"><span class="fragment">bookRestrictedByKeyword
+  :: Column PGText
+  -> QueryArr BookColumns (Column PGText)
+bookRestrictedByKeyword kw = proc (b) -> do
+  k <- bookKeywordJoin -< b
+  restrict -< k .== kw
+  returnA -< k</span>
+
+<span class="fragment">booksWithKeywordQuery :: Column PGText -> Query BookColumns
+booksWithKeywordQuery kw = proc () -> do
+  b <- bookQuery -< ()
+  bookRestrictedByKeyword kw -< b
+  returnA -< b</span>
+                        </pre>
+                        <aside class="notes">
+                            <p>To further the point, our opportunity for abstraction can go further.</p>
+                            <p>We can reuse our previous join to restrict even further.</p>
+                            <p>Meaning if we restrict by keyword often we DRY our code safely.</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>Arrows?!?</p>
+                        <br/>
+                        <p class="fragment">Query generation is purposefully not a monad.</p>
+                        <p class="fragment">Arrow has a input, processing body and an output.</p>  
+                        <p class="fragment">Outputs can only flow into input (right of -&lt;).</p>
+                        <p class="fragment">Treat it like do notation until you realise that's a lie.</p>
+                        <aside class="notes">
+                            <p></p>
+                        </aside>
                     </section>
                 </section>
                 <section>
@@ -178,11 +566,200 @@
                 <section>
                     <section>
                         <h1>Aggregation</h1>
+                        <aside class="notes">
+                            <p>Typesafety will still allowing groupBys is undoubtedly the coolest part. Lets see how that works.</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>Count</p>
+                        <br/>
+                        <pre class="highlight haskell">accessionsForBookQuery
+  :: IsbnColumn
+  -> Query (AccessionIdColumn,BookColumns)
+accessionsForBookQuery isbn = proc () -> do
+  t <- accessionsWithBookQuery -< ()
+  restrict -< t^._2.bookIsbn.to unIsbn .== unIsbn isbn
+  returnA -< t
+
+accessionCountForBookQuery :: IsbnColumn -> Query (Column PGInt8)
+accessionCountForBookQuery =
+  <span class="fragment" data-fragment-index="2">aggregate count</span>
+  . <span class="fragment" data-fragment-index="1">fmap (^._1.to unAccessionId)</span>
+  . <span class="fragment" data-fragment-index="0">accessionsForBookQuery</span>
+                        </pre>
+
+                        <aside class="notes">
+                            <p>Lets start off with counting accessions for a given ISBN. Given this query.</p>
+                            <p>Select that query into our arrow</p>
+                            <p>Transform it so it's just an ID.</p>
+                            <p>And then simply count that column</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>groupBy</p>
+                        <br/>
+                        <pre class="highlight haskell">
+accessionCountsForKeywordQuery
+  :: Query (Column PGText,Column PGInt8)
+accessionCountsForKeywordQuery =
+  <span class="fragment" data-fragment-index="2">orderBy (desc (^._2))</span>
+  . <span class="fragment" data-fragment-index="1">aggregate (p2 (groupBy,count))</span>
+  $ <span class="fragment" data-fragment-index="0">proc () -> do
+    (aId,b) <- accessionsWithBookQuery -< ()
+    k       <- bookKeywordJoin -< b
+    returnA -< (k,aId^.to unAccessionId)</span>
+                        </pre>
+                        <aside class="notes">
+                            <p>Now say we want to count the accessions we have for each keyword.</p>
+                            <p>We have this query to return each keyword,accessionId pair.</p>
+                            <p>Aggregate is a product profunctor, so we weave our two aggregations into that output.</p>
+                            <p>And order by count in descending order</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>Pagination</p>
+                        <br/>
+                        <pre class="highlight haskell"><span class="fragment">data Pagination = Pagination
+  { _paginationPage  :: Int
+  , _paginationWidth :: Int
+  }
+makeLenses ''Pagination</span>
+
+<span class="fragment">data PaginationResults a = PaginationResults
+  { _paginationResultsPage    :: Int
+  , _paginationResultsWidth   :: Int
+  , _paginationResultsMaxPage :: Int64
+  , _paginationResultsRows    :: [a]
+  } deriving (Show,Functor)
+makeLenses ''PaginationResults</span>
+                        </pre>
+                        <aside class="notes">
+                            <p>We need to paginate lots of queries and it's a pain that that often requires pain/duplication.</p>
+                            <p>With such an awesome framework, we should only need to write pagination once!</p>
+                            <p>Lets define some generic input / output for our pagination</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>Delicious Reusable SQL Bits</p>
+                        <br/>
+                        <pre class="highlight haskell"> 
+<span class="fragment">paginateQuery :: Pagination -> Query a -> Query a
+paginateQuery (Pagination p w) = limit w . offset ((p-1) * w)</span>
+
+<span class="fragment">countQuery :: (a -> Column i) -> Query a -> Query (Column PGInt8)
+countQuery getId = aggregate count . fmap getId
+</span>
+                        </pre>
+                        <aside class="notes">
+                            <p>Lets make the two reusable bits that we need to do pagination.</p>
+                            <p>The ability to limit and offset any query.</p>
+                            <p>The ability to count the rows in a query (if we have a column to count).</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>Reusable Pagination</p>
+                        <br/>
+                        <pre class="highlight haskell">
+paginate
+  :: (CanOpaleye c e m, Default QueryRunner a b)
+  => Pagination
+  -> (a -> Column i)
+  -> Query a
+  -> m (PaginationResults b)
+paginate p getId q = paginationResults p
+  <$> <span class="fragment">liftQueryFirst (countQuery getId q)</span>
+  <*> <span class="fragment">liftQuery      (paginateQuery p q)</span>
+                        </pre>
+                        <aside class="notes">
+                            <p>So then we take a query, pagination and a column to count and construct our result from</p>
+                            <p>The number of rows in the entire set.</p>
+                            <p>The restricted list of things based on the page.</p>
+                            <p>Ignore the CanOpaleye stuff. It's not important for the example and you can fiddle in the tute.</p>
+                        </aside>
+                    </section>
+                    <section>
+                        <p>Using the pagination</p>
+                        <br/>
+                        <pre class="highlight haskell">
+booksWithKeyword
+  :: CanOpaleye c e m
+  => Text
+  -> m (PaginationResults Book)
+booksWithKeyword = booksWithKeywordQuery . constant
+
+<span class="fragment">--To this
+booksWithKeywordPaginated
+  :: CanOpaleye c e m
+  => Pagination
+  -> Text
+  -> m (PaginationResults Book)
+booksWithKeywordPaginated p
+  = paginate p (^.bookIsbn.to unIsbn)
+  . booksWithKeywordQuery . constant
+
+</span></pre>
+                        <aside class="notes">
+                            <p>Using the pagination is easy.</p>
+                            <p>Take the existing query</p>
+                            <p>And whack paginate on the front of it. Awesome!</p>
+                        </aside>
                     </section>
                 </section>
                 <section>
                     <section>
-                        <h1>Missing Features</h1>
+                        <h1>Rough Edges</h1>
+                        <aside class="notes">
+                            <p>Opaleye is awesome, but there are a few bits that will make you mad.</p>
+                        </aside>
+                    </section>
+                    <section> 
+                        <p>Schema may not match DB</p>
+                        <br/>
+                        <p class="fragment">Your queries can fail at if your haskell schema is wrong.</p>
+                        <p class="fragment">Maybe needs an app boot test of the DB schema?</p>
+                        <aside class="notes">
+                        </aside>
+                    </section>
+                    <section> 
+                        <p>Dates</p>
+                        <br/>
+                        <p class="fragment">You'll quickly run into problems with dates.</p>
+                        <p class="fragment">No now(), date_trunc, intervals, etc.</p>
+                        <p class="fragment">Can't compare dates to timestamps without casting.</p>
+                        <aside class="notes">
+                        </aside>
+                    </section>
+                    <section> 
+                        <p>VARCHAR Lengths</p>
+                        <br/>
+                        <p class="fragment">It's easy to break an insert if your text is too long for the table.</p>
+                        <p class="fragment">Would be nice to encode this with newtypes or something.</p>
+                        <aside class="notes">
+                        </aside>
+                    </section>
+                    <section> 
+                        <p>NewTypes</p>
+                        <br/>
+                        <p class="fragment">Wrapping things in newtypes feels clunky sometimes..</p>
+                        <p class="fragment">Still worth it, but it could be nicer.</p>
+                        <aside class="notes">
+                        </aside>
+                    </section>
+                    <section> 
+                        <p>Cardinality Bugs</p>
+                        <br/>
+                        <p class="fragment">Because things are so composable, it's sometimes easy to join to 1-M relations accidentally.</p>
+                        <p class="fragment">It'd be nice to have a concept of a relationship / join so the cardinality of a join was documented in the types.</p>
+                        <aside class="notes">
+                        </aside>
+                    </section>
+                    <section> 
+                        <p>DBs Other than PostgreSQL?</p>
+                        <br/>
+                        <p class="fragment">But why would you do that?</p>
+                        <p class="fragment">No, seriously; just use postgres. ;)</p>
+                        <aside class="notes">
+                        </aside>
                     </section>
                 </section>
                 <section>
@@ -193,8 +770,8 @@
                 <section style="text-align: left;">
                     <h1>THE END</h1>
                     <p>
+                        - Code & Tutorial: <a href="https://github.com/benkolera/talk-opaleye/code">github.com/benkolera/talk-opaleye/code</a>
                         - Slides: <a href="http://opaleye.benkolera.com">opaleye.benkolera.com</a> <br>
-                        - Code: <a href="https://github.com/benkolera/talk-opaleye/code">github.com/benkolera/talk-opaleye/code</a>
                     </p>
                 </section>
 
@@ -223,6 +800,11 @@
                  { src: 'plugin/markdown/marked.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
                  { src: 'plugin/markdown/markdown.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
                  { src: 'plugin/highlight/highlight.js', async: true, condition: function() { return !!document.querySelector( 'pre code' ); }, callback: function() { hljs.initHighlightingOnLoad(); } },
+                 { src: 'plugin/highlight/highlight.js', async: true, callback: function() { 
+                   [].forEach.call( document.querySelectorAll( '.highlight' ), function( v, i) {
+                      hljs.highlightBlock(v);
+                   });
+                 } },
 					       { src: 'plugin/zoom-js/zoom.js', async: true },
 					       { src: 'plugin/notes/notes.js', async: true }
 				     ]

@@ -18,7 +18,7 @@ printSql = putStrLn . showSqlForPostgres
 ourConnectInfo :: ConnectInfo
 ourConnectInfo = defaultConnectInfo 
   { connectDatabase = "opallib" 
-  , connectUser     = "ben" 
+  , connectUser     = "bkolera" 
   }
 
 type Opaleye = ReaderT OpaleyeEnv (ExceptT OpaleyeError IO)

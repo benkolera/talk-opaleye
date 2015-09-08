@@ -1,0 +1,10 @@
+*.fragment.fade-out.fade-out-no-display.visible {
+  display: none;
+}
+
+*.fragment.fade-in-no-display {
+  display: none;
+}
+*.fragment.fade-in-no-display.visible {
+  display: inline;
+}

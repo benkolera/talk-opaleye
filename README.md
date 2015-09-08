@@ -1,6 +1,6 @@
 # Typesafe SQL in Haskell
 
-A talk by Ben Kolera for the 2015-09 (BFPG)[http://bfpg.org] Meetup.
+A talk by Ben Kolera for the 2015-09 [BFPG](http://bfpg.org) Meetup.
 
 The root of this project houses the revealjs source. You probably want to view
 
