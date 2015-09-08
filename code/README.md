@@ -396,7 +396,7 @@ further queries can see and use later on down the track, which gives us a lot of
 our safety!
 
 Side note, Query is just an alias for a QueryArr with no input:
-type Query a = QueryArr () a
+```type Query a = QueryArr () a```
 
 And if none of that makes sense, just know that you can safely treat Arrow notation
 just like a monadic do. You'll eventually realise this is a lie when you get a
