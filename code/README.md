@@ -40,8 +40,8 @@ aggregations, etc)
 - While maintaining a typesafe API that will not generate SQL that fails at
 runtime.
 
-This is an awesome thing, because so many applications talk to databases and it
-has always been saddening to get hit with the same old tradeoffs / problems:
+This is an awesome thing, because so many applications talk to databases it
+has always been saddening for me to get hit with the same old tradeoffs / problems: 
 
 - Raw SQL is easy but not safely composable
 - Some DB APIs restrict what you can do so you lose valuable parts of SQL
@@ -58,7 +58,7 @@ Opaleye comes achieves the goal of composable, typesafe SQL without any of these
 problems save for a moderate (but not impassable) learning curve.
 
 It is super refreshing to be able to treat your SQL with the same dose of safe
-abstraction as the rest of you haskell code, and for that alone it's well worth
+abstraction as the rest of your haskell code, and for that alone it's well worth
 diving in and trying it out for yourself! :smile:
 
 ## Table Definition
@@ -231,8 +231,8 @@ for: making SQL!
 
 ### QueryTable & Columns
 
-The queryTable takes a table definition and essentially creates a ```SELECT * FROM```
-foo query" that you can build other queries from.
+The queryTable takes a table definition and essentially creates a ```SELECT * FROM foo```
+query that you can build other queries from.
 
 ```haskell
 bookQuery :: Query BookColumns
@@ -254,7 +254,7 @@ FROM (SELECT *
 ```
 
 Which is probably not how you'd write it, but with the wonders of the Postgres
-Query planner should be more or less the same performance as the idealised SQL.
+Query planner it should be more or less the same performance as the ideal SQL.
 There are plans to improve the query generator over time so that it can get
 closer to the ideal SQL that you'd expect, but correctness is an overruling
 goal. Tom makes the claim that if your query is being generated in a way that is
@@ -271,6 +271,8 @@ So we have two main building blocks for Opaleye.
     PGText``` which corresponds to a 'foo' in the actual SQL)
   - Compound expressions: E.g. ```(b^.bookTitle .== pgStrictText "foo") :: Column PGBool```
 - Queries: A fully runnable SQL query. Can be joined to other queries.
+
+(There's also a ```QueryArr input output``` which is a query but is not runnable because it requires input first, but more on that later! :) )
 
 ### Running Queries
 
@@ -290,7 +292,7 @@ Which looks scary, but reads:
   convert columns to the haskell values, I'll run the query against the database
   and give you back the haskell values.
 
-You guessed it, QueryRunner is a ProductProfunctor, so as long as you've got a
+You guessed it! QueryRunner is a ProductProfunctor, so as long as you've got a
 transformation between each column and the haskell type then it'll all just work.
 
 Lets see it in action:
@@ -308,14 +310,15 @@ booksAll c = runQuery c (queryTable bookTable)
 
 This works because there is a ```QueryRunnerColumnDefault PGInt8 Int64``` and
 ```QueryRunnerColumnDefault PGText Text``` and the makeAdaptorAndInstance
-defined a productprofunctor instance for Book.
+defined a productprofunctor instance for Book that allows haskell to glue all of
+those smaller transformations together.
 
 To see which QueryRunnerColumnDefault instances there are, take a look at this
 list of instances here:
 
 http://hackage.haskell.org/package/opaleye-0.4.1.0/docs/Opaleye-Internal-RunQuery.html#t:QueryRunnerColumnDefault
 
-Because of this type magic, it is always required to have type signatures on
+Because of this type magic, it is always advised to have type signatures on
 your functions that are actually running the query and returning haskell values.
 You'll see this all over OpalLib.
 
@@ -369,6 +372,14 @@ findBookByIsbn :: CanOpaleye c e m => Isbn -> m (Maybe Book)
 findBookByIsbn = liftQueryFirst . findBookByIsbnQ . constant
 ```
 
+The function constant is defined in
+(Opaleye.Constant)[http://hackage.haskell.org/package/opaleye-0.4.1.0/docs/Opaleye-Constant.html]
+as
+
+```haskell
+constant :: Default Constant haskells columns => haskells -> columns
+```
+
 Constant is the opposite of QueryRunnerDefault. It goes from a haskell value to
 a literal column(s). Here we are turning the Isbn with a haskell Int64 inside it
 to a Isbn' (Column PGInt8).
@@ -381,7 +392,7 @@ We don't need to get into the nitty gritty details of arrows but it is
 worthwhile noting some points.
 
 The query generation is purposefully not a monad and that is (at least my intuition)
-that the arbitrary nesting of monadic computation gets you into trouble by
+because the arbitrary nesting of monadic computation gets you into trouble by
 allowing you to refer to things that aren't actually valid any more (because
 they are in a subquery and weren't projected/aggregated out of the query, etc).
 
@@ -407,8 +418,10 @@ click at that point. :smile:
 ### Projection
 
 Remember that the only real restriction we have on the output of our query is
-that it is a product profunctor, so you're not limited to always returning your
-table object. You're free to return tuples or just a single column.
+that it is a product profunctor (and that isn't even required if you are
+prepared to specify the transformations explicitly!), so you're not limited to
+always returning your table object. You're free to return tuples or just a
+single column. 
 
 ```haskell
 bookTitlesQuery :: Query (Column PGText)
@@ -495,7 +508,8 @@ booksWithKeywordQuery kw = proc () -> do
   returnA -< b
 ```
 
-All of these generate exactly the same SQL; which is awesome! 
+So we clearly see that we can yank out pretty much any part of our query and
+safely abstract it as we please. Awesome!
 
 More info in [OpalLib.Book](OpalLib/Book.hs).
 
@@ -595,7 +609,7 @@ each hole with an appropriate pAccession or pN call.
 Also don't forget that Querys are Functors so we can just fmap the result rather
 than breaking out into arrow syntax. They are also Profunctors,Applicatives and
 even Categories (you can compose them e.g. ```QueryArr a b -> QueryArr b c ->
-QueryArr a c). Haskell is awesome! 
+QueryArr a c```). Isn't haskell awesome?!?
 
 Generated SQL:
 
@@ -786,10 +800,11 @@ searchAccessionIdQuery s = aggregate agg $ proc () -> do
     likeTitle b t = (b^.bookTitle) `like` (constant $ "%" <> t <> "%")
 ```
 
-(Okay, so granted that's poorly factored and we start to see Arrows get in the way of
-our usual toolbox [namely not being able to use Data.Foldable.traverse_], but it
-is still getting some reuse out of what we've written and could be refactored to
-be prettier)
+Granted that could use a healthy dose of refactoring and be prettier. We also see
+Arrows get in the way of reaching for standard tools like traverse_ (this may
+still be my inexperience with Arrows, mind you) and writing our own combinators
+like restrictMaybe, but it is still nice to see such a messy thing possible in
+Opaleye.
 
 Then we can easily get back the accessionId,book,due date and keywords
 reusing a lot of stuff.
@@ -827,7 +842,8 @@ for improvement in Opaleye.
 
 These could be my inexperience or they could be just be because someone hasn't
 needed them yet. Given that opaleye is still pretty young I'm sure some of these
-have some clever fixes.
+have some clever fixes and it's just the case that it's waiting for someone to
+do it. 
 
 ### The schema on the DB could be different
 
@@ -841,7 +857,8 @@ started up so it could squawk if the DB wasn't using the right schema before it 
 
 ### Dates
 
-There is no function equivalent to NOW(). It's easy to write though:
+There is no function equivalent to NOW(),date_trunc or any of the date
+functions. They are easy to write though: 
 
 ```haskell
 now :: Column PGTimestamptz
@@ -887,6 +904,8 @@ like it could be better.
 
 But why would you do that? :wink:
 
+Btw; there appears to be an sqlite version in the pipeline. 
+
 ## Wrap Up
 
 Core concepts:
@@ -902,11 +921,25 @@ to do its bit.
   tuple. Depending on the profunctor, lots of different things can be done
   (UnpackSpec,Constant,Aggregation,etc.).
 
+Take away points:
+
+- It's a DSL that looks and feels like SQL without having anything missing.
+- It composes awesomely and safely,
+- And there aren't a lot of ways that it can go wrong at runtime.
+- While you have to learn profunctors along the way, it's still pretty digestable.
+- Even if you don't interact with SQL/Postgres it's still a nice case study in
+  how useful haskell can be!
+
+Thanks for following along!
+
 ## Acknowledgements & Further Resources
 
 Thanks to [https://github.com/tomjaguarpaw/](Tom Ellis) for the lovely library
 and all the hard work that others have done on HaskellDB (a precursor to
 Opaleye).
+
+My learning wouldn't have been possible without reading the opaleye tutorial
+first. You can find that from the opaleye github repository's readme file.
 
 Hackage: http://hackage.haskell.org/package/opaleye
 
