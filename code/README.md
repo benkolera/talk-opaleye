@@ -1,5 +1,10 @@
 # OpalLib - Demo Opaleye Code & Tutorial
 
+This is a longer form explanation of a talk that I gave at the Brisbane FP Group.
+If you prefer talking and profuse hand gestures, you may want to check it out as well:
+
+https://www.youtube.com/watch?v=A0oVn-GXOok
+
 ## Installation & Running Instructions
 
 You don't need to run the code to follow along, but if you want to see things
